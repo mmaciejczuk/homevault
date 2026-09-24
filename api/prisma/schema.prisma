@@ -1,0 +1,87 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Property {
+  id        Int      @id @default(autoincrement())
+  name      String
+  address   String?
+  yearBuilt Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rooms Room[]
+}
+
+model Room {
+  id          Int      @id @default(autoincrement())
+  name        String
+  floor       String?
+  description String?
+
+  propertyId Int
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  entries Entry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId])
+}
+
+model Entry {
+  id          Int           @id @default(autoincrement())
+  title       String
+  description String?
+  category    EntryCategory
+
+  roomId Int
+  room   Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  attachments Attachment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([roomId])
+  @@index([category])
+}
+
+model Attachment {
+  id          Int            @id @default(autoincrement())
+  fileName    String
+  storagePath String         @unique
+  mimeType    String
+  size        Int
+  kind        AttachmentKind @default(IMAGE)
+
+  entryId Int
+  entry   Entry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([entryId])
+}
+
+enum EntryCategory {
+  ELECTRICAL
+  PLUMBING
+  HEATING
+  WALL
+  FLOOR
+  DEVICE
+  NOTE
+  OTHER
+}
+
+enum AttachmentKind {
+  IMAGE
+  DOCUMENT
+}
