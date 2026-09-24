@@ -33,7 +33,7 @@ async function bootstrap() {
   );
 
   console.log(
-    `HomeVault API działa na 0.0.0.0:${port}`,
+    `HomeVault API działa na porcie ${port}`,
   );
 }
 
