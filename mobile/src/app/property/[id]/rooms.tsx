@@ -4,19 +4,25 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
-import { useCallback, useState } from 'react';
+import {
+  useCallback,
+  useState,
+} from 'react';
 
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://homevault-production.up.railway.app';
+import {
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+
+import { apiFetch } from '../../../lib/api';
 
 interface Room {
   id: number;
@@ -49,13 +55,17 @@ export default function RoomsScreen() {
         setIsLoading(true);
         setError(null);
 
-        const response = await fetch(
-          `${API_URL}/properties/${id}/rooms`,
-        );
+        const response =
+          await apiFetch(
+            `/properties/${id}/rooms`,
+          );
 
         if (!response.ok) {
+          const responseBody =
+            await response.text();
+
           throw new Error(
-            `API zwróciło status ${response.status}`,
+            `API zwróciło status ${response.status}: ${responseBody}`,
           );
         }
 
@@ -95,9 +105,14 @@ export default function RoomsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      edges={['bottom']}
+    >
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={
+          styles.content
+        }
       >
         <View style={styles.titleRow}>
           <View>
@@ -105,8 +120,11 @@ export default function RoomsScreen() {
               Pomieszczenia
             </Text>
 
-            <Text style={styles.subtitle}>
-              Zarządzaj pomieszczeniami w domu
+            <Text
+              style={styles.subtitle}
+            >
+              Zarządzaj pomieszczeniami
+              w domu
             </Text>
           </View>
 
@@ -132,9 +150,13 @@ export default function RoomsScreen() {
 
         {isLoading && (
           <View style={styles.center}>
-            <ActivityIndicator size="large" />
+            <ActivityIndicator
+              size="large"
+            />
 
-            <Text style={styles.infoText}>
+            <Text
+              style={styles.infoText}
+            >
               Pobieranie pomieszczeń...
             </Text>
           </View>
@@ -142,11 +164,15 @@ export default function RoomsScreen() {
 
         {!isLoading && error && (
           <View style={styles.center}>
-            <Text style={styles.errorTitle}>
+            <Text
+              style={styles.errorTitle}
+            >
               Wystąpił błąd
             </Text>
 
-            <Text style={styles.infoText}>
+            <Text
+              style={styles.infoText}
+            >
               {error}
             </Text>
 
@@ -154,7 +180,9 @@ export default function RoomsScreen() {
               onPress={loadRooms}
               style={styles.button}
             >
-              <Text style={styles.buttonText}>
+              <Text
+                style={styles.buttonText}
+              >
                 Spróbuj ponownie
               </Text>
             </Pressable>
@@ -164,18 +192,27 @@ export default function RoomsScreen() {
         {!isLoading &&
           !error &&
           rooms.length === 0 && (
-            <View style={styles.center}>
-              <Text style={styles.emptyIcon}>
+            <View
+              style={styles.center}
+            >
+              <Text
+                style={styles.emptyIcon}
+              >
                 🚪
               </Text>
 
-              <Text style={styles.emptyTitle}>
+              <Text
+                style={styles.emptyTitle}
+              >
                 Brak pomieszczeń
               </Text>
 
-              <Text style={styles.infoText}>
-                Dodaj pierwsze pomieszczenie,
-                np. salon, kuchnię lub kotłownię.
+              <Text
+                style={styles.infoText}
+              >
+                Dodaj pierwsze
+                pomieszczenie, np. salon,
+                kuchnię lub kotłownię.
               </Text>
 
               <Pressable
@@ -186,7 +223,11 @@ export default function RoomsScreen() {
                     styles.pressed,
                 ]}
               >
-                <Text style={styles.buttonText}>
+                <Text
+                  style={
+                    styles.buttonText
+                  }
+                >
                   + Dodaj pomieszczenie
                 </Text>
               </Pressable>
@@ -200,14 +241,17 @@ export default function RoomsScreen() {
               {rooms.map((room) => (
                 <Pressable
                   key={room.id}
-                  style={({ pressed }) => [
+                  style={({
+                    pressed,
+                  }) => [
                     styles.card,
                     pressed &&
                       styles.pressed,
                   ]}
                   onPress={() => {
                     router.push({
-                      pathname: '/room/[id]',
+                      pathname:
+                        '/room/[id]',
                       params: {
                         id: room.id.toString(),
                       },
@@ -219,23 +263,31 @@ export default function RoomsScreen() {
                       styles.iconContainer
                     }
                   >
-                    <Text style={styles.icon}>
+                    <Text
+                      style={styles.icon}
+                    >
                       🚪
                     </Text>
                   </View>
 
                   <View
-                    style={styles.roomInfo}
+                    style={
+                      styles.roomInfo
+                    }
                   >
                     <Text
-                      style={styles.roomName}
+                      style={
+                        styles.roomName
+                      }
                     >
                       {room.name}
                     </Text>
 
                     {room.floor && (
                       <Text
-                        style={styles.detail}
+                        style={
+                          styles.detail
+                        }
                       >
                         {room.floor}
                       </Text>
@@ -247,12 +299,16 @@ export default function RoomsScreen() {
                           styles.description
                         }
                       >
-                        {room.description}
+                        {
+                          room.description
+                        }
                       </Text>
                     )}
                   </View>
 
-                  <Text style={styles.arrow}>
+                  <Text
+                    style={styles.arrow}
+                  >
                     ›
                   </Text>
                 </Pressable>

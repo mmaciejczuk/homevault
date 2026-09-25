@@ -1,32 +1,47 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import {
+  router,
+  useLocalSearchParams,
+} from 'expo-router';
+
+import {
+  useEffect,
+  useState,
+} from 'react';
+
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://homevault-production.up.railway.app';
+import {
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+
+import { apiFetch } from '../../lib/api';
 
 interface Property {
   id: number;
   name: string;
   address?: string;
   yearBuilt?: number;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export default function PropertyDetailsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } =
+    useLocalSearchParams<{ id: string }>();
 
-  const [property, setProperty] = useState<Property | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [property, setProperty] =
+    useState<Property | null>(null);
+
+  const [isLoading, setIsLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState<string | null>(null);
 
   useEffect(() => {
     const loadProperty = async () => {
@@ -34,19 +49,27 @@ export default function PropertyDetailsScreen() {
         setIsLoading(true);
         setError(null);
 
-        const response = await fetch(
-          `${API_URL}/properties/${id}`,
-        );
+        const response =
+          await apiFetch(
+            `/properties/${id}`,
+          );
 
         if (!response.ok) {
+          const responseBody =
+            await response.text();
+
           throw new Error(
-            `API zwróciło status ${response.status}`,
+            `API zwróciło status ${response.status}: ${responseBody}`,
           );
         }
 
-        const data: Property = await response.json();
+        const data: Property =
+          await response.json();
 
-        console.log('Pobrano nieruchomość:', data);
+        console.log(
+          'Pobrano nieruchomość:',
+          data,
+        );
 
         setProperty(data);
       } catch (err) {
@@ -83,11 +106,18 @@ export default function PropertyDetailsScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView
+        style={styles.container}
+        edges={['bottom']}
+      >
         <View style={styles.center}>
-          <ActivityIndicator size="large" />
+          <ActivityIndicator
+            size="large"
+          />
 
-          <Text style={styles.loadingText}>
+          <Text
+            style={styles.loadingText}
+          >
             Pobieranie domu...
           </Text>
         </View>
@@ -97,21 +127,36 @@ export default function PropertyDetailsScreen() {
 
   if (error || !property) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView
+        style={styles.container}
+        edges={['bottom']}
+      >
         <View style={styles.center}>
-          <Text style={styles.errorTitle}>
+          <Text
+            style={styles.errorTitle}
+          >
             Nie udało się otworzyć domu
           </Text>
 
-          <Text style={styles.errorText}>
+          <Text
+            style={styles.errorText}
+          >
             {error}
           </Text>
 
           <Pressable
-            style={styles.secondaryButton}
-            onPress={() => router.back()}
+            style={
+              styles.secondaryButton
+            }
+            onPress={() =>
+              router.back()
+            }
           >
-            <Text style={styles.secondaryButtonText}>
+            <Text
+              style={
+                styles.secondaryButtonText
+              }
+            >
               Wróć
             </Text>
           </Pressable>
@@ -121,11 +166,18 @@ export default function PropertyDetailsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      edges={['bottom']}
+    >
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={
+          styles.content
+        }
       >
-        <Text style={styles.houseIcon}>
+        <Text
+          style={styles.houseIcon}
+        >
           🏠
         </Text>
 
@@ -141,33 +193,48 @@ export default function PropertyDetailsScreen() {
 
         {property.yearBuilt && (
           <Text style={styles.detail}>
-            Rok budowy: {property.yearBuilt}
+            Rok budowy:{' '}
+            {property.yearBuilt}
           </Text>
         )}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
+          <Text
+            style={styles.sectionTitle}
+          >
             Dokumentacja domu
           </Text>
 
           <Pressable
             style={({ pressed }) => [
               styles.menuCard,
-              pressed && styles.menuCardPressed,
+              pressed &&
+                styles.menuCardPressed,
             ]}
             onPress={handleOpenRooms}
           >
-            <Text style={styles.menuIcon}>
+            <Text
+              style={styles.menuIcon}
+            >
               🚪
             </Text>
 
-            <View style={styles.menuContent}>
-              <Text style={styles.menuTitle}>
+            <View
+              style={styles.menuContent}
+            >
+              <Text
+                style={styles.menuTitle}
+              >
                 Pomieszczenia
               </Text>
 
-              <Text style={styles.menuDescription}>
-                Salon, kuchnia, łazienka, kotłownia...
+              <Text
+                style={
+                  styles.menuDescription
+                }
+              >
+                Salon, kuchnia,
+                łazienka, kotłownia...
               </Text>
             </View>
 
@@ -179,23 +246,37 @@ export default function PropertyDetailsScreen() {
           <Pressable
             style={({ pressed }) => [
               styles.menuCard,
-              pressed && styles.menuCardPressed,
+              pressed &&
+                styles.menuCardPressed,
             ]}
             onPress={() => {
-              console.log('Zdjęcia - do implementacji');
+              console.log(
+                'Zdjęcia - do implementacji',
+              );
             }}
           >
-            <Text style={styles.menuIcon}>
+            <Text
+              style={styles.menuIcon}
+            >
               📷
             </Text>
 
-            <View style={styles.menuContent}>
-              <Text style={styles.menuTitle}>
+            <View
+              style={styles.menuContent}
+            >
+              <Text
+                style={styles.menuTitle}
+              >
                 Zdjęcia
               </Text>
 
-              <Text style={styles.menuDescription}>
-                Dokumentacja instalacji i budowy
+              <Text
+                style={
+                  styles.menuDescription
+                }
+              >
+                Dokumentacja instalacji
+                i budowy
               </Text>
             </View>
 
@@ -207,23 +288,37 @@ export default function PropertyDetailsScreen() {
           <Pressable
             style={({ pressed }) => [
               styles.menuCard,
-              pressed && styles.menuCardPressed,
+              pressed &&
+                styles.menuCardPressed,
             ]}
             onPress={() => {
-              console.log('Dokumenty - do implementacji');
+              console.log(
+                'Dokumenty - do implementacji',
+              );
             }}
           >
-            <Text style={styles.menuIcon}>
+            <Text
+              style={styles.menuIcon}
+            >
               📄
             </Text>
 
-            <View style={styles.menuContent}>
-              <Text style={styles.menuTitle}>
+            <View
+              style={styles.menuContent}
+            >
+              <Text
+                style={styles.menuTitle}
+              >
                 Dokumenty
               </Text>
 
-              <Text style={styles.menuDescription}>
-                Faktury, gwarancje i instrukcje
+              <Text
+                style={
+                  styles.menuDescription
+                }
+              >
+                Faktury, gwarancje
+                i instrukcje
               </Text>
             </View>
 
@@ -235,7 +330,8 @@ export default function PropertyDetailsScreen() {
           <Pressable
             style={({ pressed }) => [
               styles.menuCard,
-              pressed && styles.menuCardPressed,
+              pressed &&
+                styles.menuCardPressed,
             ]}
             onPress={() => {
               console.log(
@@ -243,17 +339,28 @@ export default function PropertyDetailsScreen() {
               );
             }}
           >
-            <Text style={styles.menuIcon}>
+            <Text
+              style={styles.menuIcon}
+            >
               🤖
             </Text>
 
-            <View style={styles.menuContent}>
-              <Text style={styles.menuTitle}>
+            <View
+              style={styles.menuContent}
+            >
+              <Text
+                style={styles.menuTitle}
+              >
                 Zapytaj swój dom
               </Text>
 
-              <Text style={styles.menuDescription}>
-                Wyszukuj informacje przy pomocy AI
+              <Text
+                style={
+                  styles.menuDescription
+                }
+              >
+                Wyszukuj informacje
+                przy pomocy AI
               </Text>
             </View>
 

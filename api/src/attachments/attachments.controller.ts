@@ -5,15 +5,24 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Req,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 
 import { FileInterceptor } from '@nestjs/platform-express';
 
+import { SupabaseAuthGuard } from '../auth/auth.guard';
+
+import type {
+  AuthenticatedRequest,
+} from '../auth/auth.guard';
+
 import { AttachmentsService } from './attachments.service';
 
 @Controller()
+@UseGuards(SupabaseAuthGuard)
 export class AttachmentsController {
   constructor(
     private readonly attachmentsService:
@@ -24,9 +33,13 @@ export class AttachmentsController {
   findByEntry(
     @Param('entryId', ParseIntPipe)
     entryId: number,
+
+    @Req()
+    request: AuthenticatedRequest,
   ) {
     return this.attachmentsService.findByEntry(
       entryId,
+      request.user.id,
     );
   }
 
@@ -44,10 +57,14 @@ export class AttachmentsController {
 
     @UploadedFile()
     file: Express.Multer.File,
+
+    @Req()
+    request: AuthenticatedRequest,
   ) {
     return this.attachmentsService.upload(
       entryId,
       file,
+      request.user.id,
     );
   }
 
@@ -55,7 +72,13 @@ export class AttachmentsController {
   remove(
     @Param('id', ParseIntPipe)
     id: number,
+
+    @Req()
+    request: AuthenticatedRequest,
   ) {
-    return this.attachmentsService.remove(id);
+    return this.attachmentsService.remove(
+      id,
+      request.user.id,
+    );
   }
 }

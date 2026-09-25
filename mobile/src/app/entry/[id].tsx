@@ -17,15 +17,21 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
+import {
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+
 import { File } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
+
+import { apiFetch } from '../../lib/api';
+import { supabase } from '../../lib/supabase';
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ??
@@ -71,27 +77,29 @@ interface Attachment {
   url: string;
 }
 
-const categoryLabels: Record<EntryCategory, string> = {
-  ELECTRICAL: 'Elektryka',
-  PLUMBING: 'Hydraulika',
-  HEATING: 'Ogrzewanie',
-  WALL: 'Ściany',
-  FLOOR: 'Podłoga',
-  DEVICE: 'Urządzenie',
-  NOTE: 'Notatka',
-  OTHER: 'Inne',
-};
+const categoryLabels:
+  Record<EntryCategory, string> = {
+    ELECTRICAL: 'Elektryka',
+    PLUMBING: 'Hydraulika',
+    HEATING: 'Ogrzewanie',
+    WALL: 'Ściany',
+    FLOOR: 'Podłoga',
+    DEVICE: 'Urządzenie',
+    NOTE: 'Notatka',
+    OTHER: 'Inne',
+  };
 
-const categoryIcons: Record<EntryCategory, string> = {
-  ELECTRICAL: '⚡',
-  PLUMBING: '💧',
-  HEATING: '🔥',
-  WALL: '🧱',
-  FLOOR: '🪵',
-  DEVICE: '🔧',
-  NOTE: '📝',
-  OTHER: '📌',
-};
+const categoryIcons:
+  Record<EntryCategory, string> = {
+    ELECTRICAL: '⚡',
+    PLUMBING: '💧',
+    HEATING: '🔥',
+    WALL: '🧱',
+    FLOOR: '🪵',
+    DEVICE: '🔧',
+    NOTE: '📝',
+    OTHER: '📌',
+  };
 
 export default function EntryDetailsScreen() {
   const { id } =
@@ -109,89 +117,112 @@ export default function EntryDetailsScreen() {
   const [
     selectedAttachment,
     setSelectedAttachment,
-  ] = useState<Attachment | null>(null);
+  ] =
+    useState<Attachment | null>(null);
 
   const [isLoading, setIsLoading] =
     useState(true);
 
-  const [isUploading, setIsUploading] =
+  const [
+    isUploading,
+    setIsUploading,
+  ] =
     useState(false);
 
-  const [isDeleting, setIsDeleting] =
+  const [
+    isDeleting,
+    setIsDeleting,
+  ] =
     useState(false);
 
   const [error, setError] =
     useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
-    if (!id) {
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const entryResponse = await fetch(
-        `${API_URL}/entries/${id}`,
-      );
-
-      if (!entryResponse.ok) {
-        throw new Error(
-          `Entry API zwróciło status ${entryResponse.status}`,
-        );
+  const loadData =
+    useCallback(async () => {
+      if (!id) {
+        return;
       }
 
-      const entryData: Entry =
-        await entryResponse.json();
+      try {
+        setIsLoading(true);
+        setError(null);
 
-      const [
-        roomResponse,
-        attachmentsResponse,
-      ] = await Promise.all([
-        fetch(
-          `${API_URL}/rooms/${entryData.roomId}`,
-        ),
+        const entryResponse =
+          await apiFetch(
+            `/entries/${id}`,
+          );
 
-        fetch(
-          `${API_URL}/entries/${entryData.id}/attachments`,
-        ),
-      ]);
+        if (!entryResponse.ok) {
+          const responseBody =
+            await entryResponse.text();
 
-      if (!roomResponse.ok) {
-        throw new Error(
-          `Room API zwróciło status ${roomResponse.status}`,
+          throw new Error(
+            `Entry API zwróciło status ${entryResponse.status}: ${responseBody}`,
+          );
+        }
+
+        const entryData: Entry =
+          await entryResponse.json();
+
+        const [
+          roomResponse,
+          attachmentsResponse,
+        ] = await Promise.all([
+          apiFetch(
+            `/rooms/${entryData.roomId}`,
+          ),
+
+          apiFetch(
+            `/entries/${entryData.id}/attachments`,
+          ),
+        ]);
+
+        if (!roomResponse.ok) {
+          const responseBody =
+            await roomResponse.text();
+
+          throw new Error(
+            `Room API zwróciło status ${roomResponse.status}: ${responseBody}`,
+          );
+        }
+
+        if (
+          !attachmentsResponse.ok
+        ) {
+          const responseBody =
+            await attachmentsResponse.text();
+
+          throw new Error(
+            `Attachments API zwróciło status ${attachmentsResponse.status}: ${responseBody}`,
+          );
+        }
+
+        const roomData: Room =
+          await roomResponse.json();
+
+        const attachmentsData:
+          Attachment[] =
+          await attachmentsResponse.json();
+
+        setEntry(entryData);
+        setRoom(roomData);
+        setAttachments(
+          attachmentsData,
         );
-      }
-
-      if (!attachmentsResponse.ok) {
-        throw new Error(
-          `Attachments API zwróciło status ${attachmentsResponse.status}`,
+      } catch (err) {
+        console.error(
+          'Błąd pobierania wpisu:',
+          err,
         );
+
+        setError(
+          'Nie udało się pobrać danych wpisu.',
+        );
+      } finally {
+        setIsLoading(false);
       }
-
-      const roomData: Room =
-        await roomResponse.json();
-
-      const attachmentsData: Attachment[] =
-        await attachmentsResponse.json();
-
-      setEntry(entryData);
-      setRoom(roomData);
-      setAttachments(attachmentsData);
-    } catch (err) {
-      console.error(
-        'Błąd pobierania wpisu:',
-        err,
-      );
-
-      setError(
-        'Nie udało się pobrać danych wpisu.',
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [id]);
+    }, [id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -209,8 +240,15 @@ export default function EntryDetailsScreen() {
     /*
      * WEB
      *
-     * ImagePicker zwraca normalny browserowy File,
-     * więc używamy standardowego fetch().
+     * ImagePicker zwraca normalny
+     * browserowy File.
+     *
+     * apiFetch automatycznie
+     * dokłada Authorization.
+     *
+     * Nie ustawiamy Content-Type,
+     * ponieważ fetch sam wygeneruje
+     * multipart boundary.
      */
     if (Platform.OS === 'web') {
       if (!asset.file) {
@@ -219,7 +257,8 @@ export default function EntryDetailsScreen() {
         );
       }
 
-      const formData = new FormData();
+      const formData =
+        new FormData();
 
       formData.append(
         'file',
@@ -229,13 +268,14 @@ export default function EntryDetailsScreen() {
           `photo-${Date.now()}.jpg`,
       );
 
-      const response = await fetch(
-        `${API_URL}/entries/${id}/attachments`,
-        {
-          method: 'POST',
-          body: formData,
-        },
-      );
+      const response =
+        await apiFetch(
+          `/entries/${id}/attachments`,
+          {
+            method: 'POST',
+            body: formData,
+          },
+        );
 
       if (!response.ok) {
         const responseBody =
@@ -252,7 +292,13 @@ export default function EntryDetailsScreen() {
     /*
      * ANDROID / IOS
      *
-     * Nie przekazujemy do FormData obiektu:
+     * Zostawiamy działający wariant:
+     *
+     * expo-file-system File
+     * +
+     * expo/fetch
+     *
+     * Nie używamy obiektu:
      *
      * {
      *   uri,
@@ -260,36 +306,67 @@ export default function EntryDetailsScreen() {
      *   type
      * }
      *
-     * React Native / Expo 57 zgłasza dla niego:
+     * ponieważ Expo zgłaszało:
      *
      * Unsupported FormDataPart implementation
-     *
-     * Tworzymy prawdziwy File z expo-file-system
-     * i wysyłamy go przez expo/fetch.
      */
-    const file = new File(asset.uri);
 
-    const formData = new FormData();
+    const {
+      data: {
+        session,
+      },
+      error:
+        sessionError,
+    } =
+      await supabase.auth.getSession();
 
-    console.log('UPLOAD FILE', {
-      uri: file.uri,
-      name: file.name,
-      type: file.type,
-      size: file.size,
-    });
+    if (sessionError) {
+      throw sessionError;
+    }
+
+    if (
+      !session?.access_token
+    ) {
+      throw new Error(
+        'Brak aktywnej sesji użytkownika.',
+      );
+    }
+
+    const file =
+      new File(asset.uri);
+
+    const formData =
+      new FormData();
+
+    console.log(
+      'UPLOAD FILE',
+      {
+        uri: file.uri,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+      },
+    );
 
     formData.append(
       'file',
       file,
     );
 
-    const response = await expoFetch(
-      `${API_URL}/entries/${id}/attachments`,
-      {
-        method: 'POST',
-        body: formData,
-      },
-    );
+    const response =
+      await expoFetch(
+        `${API_URL}/entries/${id}/attachments`,
+        {
+          method: 'POST',
+
+          headers: {
+            Authorization:
+              `Bearer ${session.access_token}`,
+          },
+
+          body: formData,
+        },
+      );
 
     console.log(
       'UPLOAD RESPONSE:',
@@ -308,143 +385,179 @@ export default function EntryDetailsScreen() {
     return response.json();
   };
 
-  const uploadPickedAsset = async (
-    asset: ImagePicker.ImagePickerAsset,
-  ) => {
-    try {
-      setIsUploading(true);
+  const uploadPickedAsset =
+    async (
+      asset:
+        ImagePicker.ImagePickerAsset,
+    ) => {
+      try {
+        setIsUploading(true);
 
-      await uploadImage(asset);
+        await uploadImage(asset);
 
-      await loadData();
-    } catch (err) {
-      console.error(
-        'Błąd wysyłania zdjęcia:',
-        err,
-      );
+        await loadData();
+      } catch (err) {
+        console.error(
+          'Błąd wysyłania zdjęcia:',
+          err,
+        );
 
-      showMessage(
-        'Nie udało się wysłać zdjęcia.',
-      );
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handlePickImage = async () => {
-    try {
-      const result =
-        await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          allowsEditing: false,
-          quality: 0.85,
-        });
-
-      if (
-        result.canceled ||
-        !result.assets.length
-      ) {
-        return;
+        showMessage(
+          'Nie udało się wysłać zdjęcia.',
+        );
+      } finally {
+        setIsUploading(false);
       }
+    };
 
-      await uploadPickedAsset(
-        result.assets[0],
-      );
-    } catch (err) {
-      console.error(
-        'Błąd wyboru zdjęcia:',
-        err,
-      );
+  const handlePickImage =
+    async () => {
+      try {
+        const result =
+          await ImagePicker
+            .launchImageLibraryAsync({
+              mediaTypes: [
+                'images',
+              ],
 
-      showMessage(
-        'Nie udało się wybrać zdjęcia.',
-      );
-    }
-  };
+              allowsEditing:
+                false,
 
-  const handleTakePhoto = async () => {
-    try {
-      if (Platform.OS !== 'web') {
-        const permission =
-          await ImagePicker.requestCameraPermissionsAsync();
+              quality: 0.85,
+            });
 
-        if (!permission.granted) {
-          Alert.alert(
-            'Brak dostępu do aparatu',
-            'HomeVault potrzebuje dostępu do aparatu, aby wykonać zdjęcie.',
-          );
-
+        if (
+          result.canceled ||
+          !result.assets.length
+        ) {
           return;
         }
+
+        await uploadPickedAsset(
+          result.assets[0],
+        );
+      } catch (err) {
+        console.error(
+          'Błąd wyboru zdjęcia:',
+          err,
+        );
+
+        showMessage(
+          'Nie udało się wybrać zdjęcia.',
+        );
       }
+    };
 
-      const result =
-        await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
-          allowsEditing: false,
-          quality: 0.85,
-        });
+  const handleTakePhoto =
+    async () => {
+      try {
+        if (
+          Platform.OS !== 'web'
+        ) {
+          const permission =
+            await ImagePicker
+              .requestCameraPermissionsAsync();
 
-      if (
-        result.canceled ||
-        !result.assets.length
-      ) {
-        return;
+          if (
+            !permission.granted
+          ) {
+            Alert.alert(
+              'Brak dostępu do aparatu',
+              'HomeVault potrzebuje dostępu do aparatu, aby wykonać zdjęcie.',
+            );
+
+            return;
+          }
+        }
+
+        const result =
+          await ImagePicker
+            .launchCameraAsync({
+              mediaTypes: [
+                'images',
+              ],
+
+              allowsEditing:
+                false,
+
+              quality: 0.85,
+            });
+
+        if (
+          result.canceled ||
+          !result.assets.length
+        ) {
+          return;
+        }
+
+        await uploadPickedAsset(
+          result.assets[0],
+        );
+      } catch (err) {
+        console.error(
+          'Błąd aparatu:',
+          err,
+        );
+
+        showMessage(
+          'Nie udało się wykonać zdjęcia.',
+        );
       }
-
-      await uploadPickedAsset(
-        result.assets[0],
-      );
-    } catch (err) {
-      console.error(
-        'Błąd aparatu:',
-        err,
-      );
-
-      showMessage(
-        'Nie udało się wykonać zdjęcia.',
-      );
-    }
-  };
+    };
 
   const askDeleteConfirmation =
     async (): Promise<boolean> => {
-      if (Platform.OS === 'web') {
+      if (
+        Platform.OS === 'web'
+      ) {
         return window.confirm(
           'Czy na pewno chcesz usunąć to zdjęcie?',
         );
       }
 
-      return new Promise((resolve) => {
-        Alert.alert(
-          'Usuń zdjęcie',
-          'Czy na pewno chcesz usunąć to zdjęcie?',
-          [
+      return new Promise(
+        (resolve) => {
+          Alert.alert(
+            'Usuń zdjęcie',
+
+            'Czy na pewno chcesz usunąć to zdjęcie?',
+
+            [
+              {
+                text: 'Anuluj',
+                style: 'cancel',
+
+                onPress: () =>
+                  resolve(false),
+              },
+
+              {
+                text: 'Usuń',
+
+                style:
+                  'destructive',
+
+                onPress: () =>
+                  resolve(true),
+              },
+            ],
+
             {
-              text: 'Anuluj',
-              style: 'cancel',
-              onPress: () =>
+              cancelable: true,
+
+              onDismiss: () =>
                 resolve(false),
             },
-            {
-              text: 'Usuń',
-              style: 'destructive',
-              onPress: () =>
-                resolve(true),
-            },
-          ],
-          {
-            cancelable: true,
-            onDismiss: () =>
-              resolve(false),
-          },
-        );
-      });
+          );
+        },
+      );
     };
 
   const handleDeleteAttachment =
     async () => {
-      if (!selectedAttachment) {
+      if (
+        !selectedAttachment
+      ) {
         return;
       }
 
@@ -458,12 +571,14 @@ export default function EntryDetailsScreen() {
       try {
         setIsDeleting(true);
 
-        const response = await fetch(
-          `${API_URL}/attachments/${selectedAttachment.id}`,
-          {
-            method: 'DELETE',
-          },
-        );
+        const response =
+          await apiFetch(
+            `/attachments/${selectedAttachment.id}`,
+            {
+              method:
+                'DELETE',
+            },
+          );
 
         if (!response.ok) {
           const responseBody =
@@ -474,7 +589,9 @@ export default function EntryDetailsScreen() {
           );
         }
 
-        setSelectedAttachment(null);
+        setSelectedAttachment(
+          null,
+        );
 
         await loadData();
       } catch (err) {
@@ -494,7 +611,9 @@ export default function EntryDetailsScreen() {
   const showMessage = (
     message: string,
   ) => {
-    if (Platform.OS === 'web') {
+    if (
+      Platform.OS === 'web'
+    ) {
       window.alert(message);
     } else {
       Alert.alert(
@@ -506,11 +625,24 @@ export default function EntryDetailsScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" />
+      <SafeAreaView
+        style={
+          styles.container
+        }
+        edges={['bottom']}
+      >
+        <View
+          style={styles.center}
+        >
+          <ActivityIndicator
+            size="large"
+          />
 
-          <Text style={styles.infoText}>
+          <Text
+            style={
+              styles.infoText
+            }
+          >
             Pobieranie wpisu...
           </Text>
         </View>
@@ -523,22 +655,41 @@ export default function EntryDetailsScreen() {
     !entry
   ) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <Text style={styles.errorTitle}>
+      <SafeAreaView
+        style={
+          styles.container
+        }
+        edges={['bottom']}
+      >
+        <View
+          style={styles.center}
+        >
+          <Text
+            style={
+              styles.errorTitle
+            }
+          >
             Wystąpił błąd
           </Text>
 
-          <Text style={styles.infoText}>
+          <Text
+            style={
+              styles.infoText
+            }
+          >
             {error}
           </Text>
 
           <Pressable
-            style={styles.retryButton}
+            style={
+              styles.retryButton
+            }
             onPress={loadData}
           >
             <Text
-              style={styles.retryButtonText}
+              style={
+                styles.retryButtonText
+              }
             >
               Spróbuj ponownie
             </Text>
@@ -549,72 +700,140 @@ export default function EntryDetailsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={
+        styles.container
+      }
+      edges={['bottom']}
+    >
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={
+          styles.content
+        }
       >
-        <View style={styles.categoryRow}>
+        <View
+          style={
+            styles.categoryRow
+          }
+        >
           <View
-            style={styles.categoryIconBox}
+            style={
+              styles.categoryIconBox
+            }
           >
             <Text
-              style={styles.categoryIcon}
+              style={
+                styles.categoryIcon
+              }
             >
-              {categoryIcons[entry.category]}
+              {
+                categoryIcons[
+                  entry.category
+                ]
+              }
             </Text>
           </View>
 
           <View>
             <Text
-              style={styles.categoryLabel}
+              style={
+                styles.categoryLabel
+              }
             >
-              {categoryLabels[entry.category]}
+              {
+                categoryLabels[
+                  entry.category
+                ]
+              }
             </Text>
 
             {room && (
-              <Text style={styles.roomName}>
+              <Text
+                style={
+                  styles.roomName
+                }
+              >
                 🚪 {room.name}
               </Text>
             )}
           </View>
         </View>
 
-        <Text style={styles.title}>
+        <Text
+          style={styles.title}
+        >
           {entry.title}
         </Text>
 
         {entry.description && (
-          <Text style={styles.description}>
-            {entry.description}
+          <Text
+            style={
+              styles.description
+            }
+          >
+            {
+              entry.description
+            }
           </Text>
         )}
 
-        <View style={styles.divider} />
+        <View
+          style={
+            styles.divider
+          }
+        />
 
-        <View style={styles.sectionHeader}>
+        <View
+          style={
+            styles.sectionHeader
+          }
+        >
           <View>
-            <Text style={styles.sectionTitle}>
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
               Zdjęcia
             </Text>
 
             <Text
-              style={styles.sectionSubtitle}
+              style={
+                styles.sectionSubtitle
+              }
             >
-              {attachments.length === 1
-                ? '1 zdjęcie'
-                : `${attachments.length} zdjęć`}
+              {
+                attachments.length ===
+                1
+                  ? '1 zdjęcie'
+                  : `${attachments.length} zdjęć`
+              }
             </Text>
           </View>
         </View>
 
-        <View style={styles.photoActions}>
-          {Platform.OS !== 'web' && (
+        <View
+          style={
+            styles.photoActions
+          }
+        >
+          {Platform.OS !==
+            'web' && (
             <Pressable
-              disabled={isUploading}
-              onPress={handleTakePhoto}
-              style={({ pressed }) => [
+              disabled={
+                isUploading
+              }
+              onPress={
+                handleTakePhoto
+              }
+              style={({
+                pressed,
+              }) => [
                 styles.cameraButton,
-                pressed && styles.pressed,
+
+                pressed &&
+                  styles.pressed,
+
                 isUploading &&
                   styles.disabled,
               ]}
@@ -630,11 +849,20 @@ export default function EntryDetailsScreen() {
           )}
 
           <Pressable
-            disabled={isUploading}
-            onPress={handlePickImage}
-            style={({ pressed }) => [
+            disabled={
+              isUploading
+            }
+            onPress={
+              handlePickImage
+            }
+            style={({
+              pressed,
+            }) => [
               styles.galleryButton,
-              pressed && styles.pressed,
+
+              pressed &&
+                styles.pressed,
+
               isUploading &&
                 styles.disabled,
             ]}
@@ -650,70 +878,120 @@ export default function EntryDetailsScreen() {
         </View>
 
         {isUploading && (
-          <View style={styles.uploadStatus}>
+          <View
+            style={
+              styles.uploadStatus
+            }
+          >
             <ActivityIndicator />
 
             <Text
-              style={styles.uploadStatusText}
+              style={
+                styles.uploadStatusText
+              }
             >
               Wysyłanie zdjęcia...
             </Text>
           </View>
         )}
 
-        {attachments.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>
+        {attachments.length ===
+        0 ? (
+          <View
+            style={
+              styles.emptyState
+            }
+          >
+            <Text
+              style={
+                styles.emptyIcon
+              }
+            >
               📷
             </Text>
 
-            <Text style={styles.emptyTitle}>
+            <Text
+              style={
+                styles.emptyTitle
+              }
+            >
               Brak zdjęć
             </Text>
 
-            <Text style={styles.infoText}>
-              Zrób zdjęcie instalacji,
-              urządzenia albo wykonanych prac
-              lub wybierz istniejące zdjęcie.
+            <Text
+              style={
+                styles.infoText
+              }
+            >
+              Zrób zdjęcie
+              instalacji,
+              urządzenia albo
+              wykonanych prac
+              lub wybierz
+              istniejące zdjęcie.
             </Text>
           </View>
         ) : (
-          <View style={styles.gallery}>
+          <View
+            style={
+              styles.gallery
+            }
+          >
             {attachments.map(
-              (attachment) => (
+              (
+                attachment,
+              ) => (
                 <Pressable
-                  key={attachment.id}
+                  key={
+                    attachment.id
+                  }
                   onPress={() =>
                     setSelectedAttachment(
                       attachment,
                     )
                   }
-                  style={({ pressed }) => [
+                  style={({
+                    pressed,
+                  }) => [
                     styles.imageCard,
+
                     pressed &&
                       styles.pressed,
                   ]}
                 >
                   <Image
                     source={{
-                      uri: attachment.url,
+                      uri:
+                        attachment.url,
                     }}
-                    style={styles.image}
+                    style={
+                      styles.image
+                    }
                     resizeMode="cover"
                   />
 
                   <View
-                    style={styles.imageInfo}
+                    style={
+                      styles.imageInfo
+                    }
                   >
                     <Text
-                      style={styles.fileName}
-                      numberOfLines={1}
+                      style={
+                        styles.fileName
+                      }
+                      numberOfLines={
+                        1
+                      }
                     >
-                      {attachment.fileName}
+                      {
+                        attachment.fileName
+                      }
                     </Text>
 
                     <Text
-                      style={styles.fileSize}
+                      style={
+                        styles.fileSize
+                      }
                     >
                       {formatFileSize(
                         attachment.size,
@@ -729,22 +1007,31 @@ export default function EntryDetailsScreen() {
 
       <Modal
         visible={
-          selectedAttachment !== null
+          selectedAttachment !==
+          null
         }
         transparent
         animationType="fade"
         onRequestClose={() =>
-          setSelectedAttachment(null)
+          setSelectedAttachment(
+            null,
+          )
         }
       >
         <View
-          style={styles.modalBackdrop}
+          style={
+            styles.modalBackdrop
+          }
         >
           <View
-            style={styles.modalContainer}
+            style={
+              styles.modalContainer
+            }
           >
             <View
-              style={styles.modalHeader}
+              style={
+                styles.modalHeader
+              }
             >
               <View
                 style={
@@ -755,10 +1042,13 @@ export default function EntryDetailsScreen() {
                   style={
                     styles.modalFileName
                   }
-                  numberOfLines={1}
+                  numberOfLines={
+                    1
+                  }
                 >
                   {
-                    selectedAttachment?.fileName
+                    selectedAttachment
+                      ?.fileName
                   }
                 </Text>
 
@@ -781,8 +1071,11 @@ export default function EntryDetailsScreen() {
                     null,
                   )
                 }
-                style={({ pressed }) => [
+                style={({
+                  pressed,
+                }) => [
                   styles.closeButton,
+
                   pressed &&
                     styles.pressed,
                 ]}
@@ -803,23 +1096,32 @@ export default function EntryDetailsScreen() {
                   uri:
                     selectedAttachment.url,
                 }}
-                style={styles.fullImage}
+                style={
+                  styles.fullImage
+                }
                 resizeMode="contain"
               />
             )}
 
             <View
-              style={styles.modalActions}
+              style={
+                styles.modalActions
+              }
             >
               <Pressable
-                disabled={isDeleting}
+                disabled={
+                  isDeleting
+                }
                 onPress={() =>
                   setSelectedAttachment(
                     null,
                   )
                 }
-                style={({ pressed }) => [
+                style={({
+                  pressed,
+                }) => [
                   styles.cancelButton,
+
                   pressed &&
                     styles.pressed,
                 ]}
@@ -834,14 +1136,20 @@ export default function EntryDetailsScreen() {
               </Pressable>
 
               <Pressable
-                disabled={isDeleting}
+                disabled={
+                  isDeleting
+                }
                 onPress={
                   handleDeleteAttachment
                 }
-                style={({ pressed }) => [
+                style={({
+                  pressed,
+                }) => [
                   styles.deleteButton,
+
                   pressed &&
                     styles.pressed,
+
                   isDeleting &&
                     styles.disabled,
                 ]}
@@ -893,353 +1201,388 @@ function formatFileSize(
   const kilobytes =
     bytes / 1024;
 
-  if (kilobytes < 1024) {
-    return `${kilobytes.toFixed(1)} KB`;
+  if (
+    kilobytes < 1024
+  ) {
+    return `${kilobytes.toFixed(
+      1,
+    )} KB`;
   }
 
   const megabytes =
     kilobytes / 1024;
 
-  return `${megabytes.toFixed(1)} MB`;
+  return `${megabytes.toFixed(
+    1,
+  )} MB`;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F7F8FA',
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        '#F7F8FA',
+    },
 
-  content: {
-    padding: 24,
-    paddingBottom: 60,
-  },
+    content: {
+      padding: 24,
+      paddingBottom: 60,
+    },
 
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
+    center: {
+      flex: 1,
+      justifyContent:
+        'center',
+      alignItems: 'center',
+      padding: 24,
+    },
 
-  categoryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+    categoryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
 
-  categoryIconBox: {
-    width: 58,
-    height: 58,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
+    categoryIconBox: {
+      width: 58,
+      height: 58,
+      borderRadius: 16,
+      backgroundColor:
+        '#FFFFFF',
+      borderWidth: 1,
+      borderColor:
+        '#E5E7EB',
+      justifyContent:
+        'center',
+      alignItems: 'center',
+      marginRight: 14,
+    },
 
-  categoryIcon: {
-    fontSize: 30,
-  },
+    categoryIcon: {
+      fontSize: 30,
+    },
 
-  categoryLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#6B7280',
-    textTransform: 'uppercase',
-  },
+    categoryLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: '#6B7280',
+      textTransform:
+        'uppercase',
+    },
 
-  roomName: {
-    marginTop: 5,
-    fontSize: 14,
-    color: '#6B7280',
-  },
+    roomName: {
+      marginTop: 5,
+      fontSize: 14,
+      color: '#6B7280',
+    },
 
-  title: {
-    marginTop: 24,
-    fontSize: 30,
-    fontWeight: '700',
-    color: '#111827',
-  },
+    title: {
+      marginTop: 24,
+      fontSize: 30,
+      fontWeight: '700',
+      color: '#111827',
+    },
 
-  description: {
-    marginTop: 12,
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#4B5563',
-  },
+    description: {
+      marginTop: 12,
+      fontSize: 16,
+      lineHeight: 24,
+      color: '#4B5563',
+    },
 
-  divider: {
-    marginTop: 30,
-    height: 1,
-    backgroundColor: '#E5E7EB',
-  },
+    divider: {
+      marginTop: 30,
+      height: 1,
+      backgroundColor:
+        '#E5E7EB',
+    },
 
-  sectionHeader: {
-    marginTop: 30,
-  },
+    sectionHeader: {
+      marginTop: 30,
+    },
 
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#111827',
-  },
+    sectionTitle: {
+      fontSize: 22,
+      fontWeight: '700',
+      color: '#111827',
+    },
 
-  sectionSubtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    color: '#9CA3AF',
-  },
+    sectionSubtitle: {
+      marginTop: 4,
+      fontSize: 13,
+      color: '#9CA3AF',
+    },
 
-  photoActions: {
-    marginTop: 18,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
+    photoActions: {
+      marginTop: 18,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 12,
+    },
 
-  cameraButton: {
-    minHeight: 46,
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    borderRadius: 11,
-    backgroundColor: '#111827',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    cameraButton: {
+      minHeight: 46,
+      paddingHorizontal: 18,
+      paddingVertical: 13,
+      borderRadius: 11,
+      backgroundColor:
+        '#111827',
+      justifyContent:
+        'center',
+      alignItems: 'center',
+    },
 
-  cameraButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+    cameraButtonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '600',
+    },
 
-  galleryButton: {
-    minHeight: 46,
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    borderRadius: 11,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    galleryButton: {
+      minHeight: 46,
+      paddingHorizontal: 18,
+      paddingVertical: 13,
+      borderRadius: 11,
+      backgroundColor:
+        '#FFFFFF',
+      borderWidth: 1,
+      borderColor:
+        '#D1D5DB',
+      justifyContent:
+        'center',
+      alignItems: 'center',
+    },
 
-  galleryButtonText: {
-    color: '#111827',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+    galleryButtonText: {
+      color: '#111827',
+      fontSize: 14,
+      fontWeight: '600',
+    },
 
-  uploadStatus: {
-    marginTop: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
+    uploadStatus: {
+      marginTop: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
 
-  uploadStatusText: {
-    color: '#6B7280',
-    fontSize: 14,
-  },
+    uploadStatusText: {
+      color: '#6B7280',
+      fontSize: 14,
+    },
 
-  uploadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
+    uploadingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
 
-  emptyState: {
-    minHeight: 300,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    emptyState: {
+      minHeight: 300,
+      justifyContent:
+        'center',
+      alignItems: 'center',
+    },
 
-  emptyIcon: {
-    fontSize: 54,
-  },
+    emptyIcon: {
+      fontSize: 54,
+    },
 
-  emptyTitle: {
-    marginTop: 14,
-    fontSize: 19,
-    fontWeight: '600',
-    color: '#111827',
-  },
+    emptyTitle: {
+      marginTop: 14,
+      fontSize: 19,
+      fontWeight: '600',
+      color: '#111827',
+    },
 
-  infoText: {
-    marginTop: 8,
-    maxWidth: 350,
-    textAlign: 'center',
-    color: '#6B7280',
-    lineHeight: 21,
-  },
+    infoText: {
+      marginTop: 8,
+      maxWidth: 350,
+      textAlign: 'center',
+      color: '#6B7280',
+      lineHeight: 21,
+    },
 
-  gallery: {
-    marginTop: 22,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-  },
+    gallery: {
+      marginTop: 22,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 16,
+    },
 
-  imageCard: {
-    width: 240,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
+    imageCard: {
+      width: 240,
+      borderRadius: 16,
+      overflow: 'hidden',
+      backgroundColor:
+        '#FFFFFF',
+      borderWidth: 1,
+      borderColor:
+        '#E5E7EB',
+    },
 
-  image: {
-    width: '100%',
-    height: 180,
-    backgroundColor: '#E5E7EB',
-  },
+    image: {
+      width: '100%',
+      height: 180,
+      backgroundColor:
+        '#E5E7EB',
+    },
 
-  imageInfo: {
-    padding: 11,
-  },
+    imageInfo: {
+      padding: 11,
+    },
 
-  fileName: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#374151',
-  },
+    fileName: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: '#374151',
+    },
 
-  fileSize: {
-    marginTop: 3,
-    fontSize: 11,
-    color: '#9CA3AF',
-  },
+    fileSize: {
+      marginTop: 3,
+      fontSize: 11,
+      color: '#9CA3AF',
+    },
 
-  errorTitle: {
-    fontSize: 21,
-    fontWeight: '700',
-    color: '#B91C1C',
-  },
+    errorTitle: {
+      fontSize: 21,
+      fontWeight: '700',
+      color: '#B91C1C',
+    },
 
-  retryButton: {
-    marginTop: 22,
-    paddingHorizontal: 22,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: '#111827',
-  },
+    retryButton: {
+      marginTop: 22,
+      paddingHorizontal: 22,
+      paddingVertical: 14,
+      borderRadius: 12,
+      backgroundColor:
+        '#111827',
+    },
 
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
+    retryButtonText: {
+      color: '#FFFFFF',
+      fontWeight: '600',
+    },
 
-  pressed: {
-    opacity: 0.7,
-  },
+    pressed: {
+      opacity: 0.7,
+    },
 
-  disabled: {
-    opacity: 0.55,
-  },
+    disabled: {
+      opacity: 0.55,
+    },
 
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor:
-      'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor:
+        'rgba(0, 0, 0, 0.85)',
+      justifyContent:
+        'center',
+      alignItems: 'center',
+      padding: 24,
+    },
 
-  modalContainer: {
-    width: '100%',
-    maxWidth: 1000,
-    maxHeight: '95%',
-    backgroundColor: '#111827',
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
+    modalContainer: {
+      width: '100%',
+      maxWidth: 1000,
+      maxHeight: '95%',
+      backgroundColor:
+        '#111827',
+      borderRadius: 18,
+      overflow: 'hidden',
+    },
 
-  modalHeader: {
-    minHeight: 68,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#374151',
-  },
+    modalHeader: {
+      minHeight: 68,
+      paddingHorizontal: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent:
+        'space-between',
+      borderBottomWidth: 1,
+      borderBottomColor:
+        '#374151',
+    },
 
-  modalHeaderText: {
-    flex: 1,
-    marginRight: 16,
-  },
+    modalHeaderText: {
+      flex: 1,
+      marginRight: 16,
+    },
 
-  modalFileName: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
+    modalFileName: {
+      color: '#FFFFFF',
+      fontSize: 15,
+      fontWeight: '600',
+    },
 
-  modalFileSize: {
-    marginTop: 3,
-    color: '#9CA3AF',
-    fontSize: 12,
-  },
+    modalFileSize: {
+      marginTop: 3,
+      color: '#9CA3AF',
+      fontSize: 12,
+    },
 
-  closeButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#374151',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    closeButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      backgroundColor:
+        '#374151',
+      justifyContent:
+        'center',
+      alignItems: 'center',
+    },
 
-  closeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
+    closeButtonText: {
+      color: '#FFFFFF',
+      fontSize: 18,
+      fontWeight: '600',
+    },
 
-  fullImage: {
-    width: '100%',
-    height: 600,
-    backgroundColor: '#000000',
-  },
+    fullImage: {
+      width: '100%',
+      height: 600,
+      backgroundColor:
+        '#000000',
+    },
 
-  modalActions: {
-    minHeight: 76,
-    padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#374151',
-  },
+    modalActions: {
+      minHeight: 76,
+      padding: 16,
+      flexDirection: 'row',
+      justifyContent:
+        'flex-end',
+      alignItems: 'center',
+      gap: 12,
+      borderTopWidth: 1,
+      borderTopColor:
+        '#374151',
+    },
 
-  cancelButton: {
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: '#374151',
-  },
+    cancelButton: {
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      borderRadius: 10,
+      backgroundColor:
+        '#374151',
+    },
 
-  cancelButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
+    cancelButtonText: {
+      color: '#FFFFFF',
+      fontWeight: '600',
+    },
 
-  deleteButton: {
-    minWidth: 150,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: '#DC2626',
-    alignItems: 'center',
-  },
+    deleteButton: {
+      minWidth: 150,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      borderRadius: 10,
+      backgroundColor:
+        '#DC2626',
+      alignItems: 'center',
+    },
 
-  deleteButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-});
+    deleteButtonText: {
+      color: '#FFFFFF',
+      fontWeight: '600',
+    },
+  });

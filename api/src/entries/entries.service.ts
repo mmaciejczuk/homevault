@@ -28,48 +28,73 @@ export class EntriesService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async findByRoom(roomId: number) {
-    const room = await this.prisma.room.findUnique({
-      where: {
-        id: roomId,
-      },
-      select: {
-        id: true,
-      },
-    });
+  async findByRoom(
+    roomId: number,
+    ownerId: string,
+  ) {
+    const room =
+      await this.prisma.room.findFirst({
+        where: {
+          id: roomId,
+
+          property: {
+            ownerId,
+          },
+        },
+
+        select: {
+          id: true,
+        },
+      });
 
     if (!room) {
-      throw new NotFoundException('Room not found');
+      throw new NotFoundException(
+        'Room not found',
+      );
     }
 
     return this.prisma.entry.findMany({
       where: {
         roomId,
       },
+
       orderBy: {
         createdAt: 'desc',
       },
     });
   }
 
-  async findOne(id: number) {
-    const entry = await this.prisma.entry.findUnique({
-      where: {
-        id,
-      },
-      include: {
-        room: {
-          select: {
-            id: true,
-            name: true,
-            propertyId: true,
+  async findOne(
+    id: number,
+    ownerId: string,
+  ) {
+    const entry =
+      await this.prisma.entry.findFirst({
+        where: {
+          id,
+
+          room: {
+            property: {
+              ownerId,
+            },
           },
         },
-      },
-    });
+
+        include: {
+          room: {
+            select: {
+              id: true,
+              name: true,
+              propertyId: true,
+            },
+          },
+        },
+      });
 
     if (!entry) {
-      throw new NotFoundException('Entry not found');
+      throw new NotFoundException(
+        'Entry not found',
+      );
     }
 
     return entry;
@@ -78,18 +103,27 @@ export class EntriesService {
   async create(
     roomId: number,
     dto: CreateEntryDto,
+    ownerId: string,
   ) {
-    const room = await this.prisma.room.findUnique({
-      where: {
-        id: roomId,
-      },
-      select: {
-        id: true,
-      },
-    });
+    const room =
+      await this.prisma.room.findFirst({
+        where: {
+          id: roomId,
+
+          property: {
+            ownerId,
+          },
+        },
+
+        select: {
+          id: true,
+        },
+      });
 
     if (!room) {
-      throw new NotFoundException('Room not found');
+      throw new NotFoundException(
+        'Room not found',
+      );
     }
 
     if (!dto.title?.trim()) {
@@ -98,7 +132,11 @@ export class EntriesService {
       );
     }
 
-    if (!ENTRY_CATEGORIES.includes(dto.category)) {
+    if (
+      !ENTRY_CATEGORIES.includes(
+        dto.category,
+      )
+    ) {
       throw new BadRequestException(
         'Invalid entry category',
       );
@@ -107,8 +145,11 @@ export class EntriesService {
     return this.prisma.entry.create({
       data: {
         title: dto.title.trim(),
+
         description:
-          dto.description?.trim() || undefined,
+          dto.description?.trim() ||
+          undefined,
+
         category: dto.category,
         roomId,
       },

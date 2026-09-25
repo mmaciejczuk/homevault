@@ -9,7 +9,6 @@ import {
   Alert,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,7 +16,11 @@ import {
   View,
 } from 'react-native';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://homevault-production.up.railway.app';
+import {
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+
+import { apiFetch } from '../../../lib/api';
 
 type EntryCategory =
   | 'ELECTRICAL'
@@ -85,11 +88,15 @@ export default function CreateEntryScreen() {
   const [title, setTitle] =
     useState('');
 
-  const [description, setDescription] =
-    useState('');
+  const [
+    description,
+    setDescription,
+  ] = useState('');
 
   const [category, setCategory] =
-    useState<EntryCategory>('ELECTRICAL');
+    useState<EntryCategory>(
+      'ELECTRICAL',
+    );
 
   const [isSaving, setIsSaving] =
     useState(false);
@@ -113,6 +120,15 @@ export default function CreateEntryScreen() {
   };
 
   const handleSave = async () => {
+    if (!id) {
+      showMessage(
+        'Błąd',
+        'Brak identyfikatora pomieszczenia.',
+      );
+
+      return;
+    }
+
     if (!title.trim()) {
       showMessage(
         'Brak tytułu',
@@ -127,8 +143,11 @@ export default function CreateEntryScreen() {
 
       const payload = {
         title: title.trim(),
+
         description:
-          description.trim() || undefined,
+          description.trim() ||
+          undefined,
+
         category,
       };
 
@@ -137,19 +156,22 @@ export default function CreateEntryScreen() {
         payload,
       );
 
-      const response = await fetch(
-        `${API_URL}/rooms/${id}/entries`,
-        {
-          method: 'POST',
+      const response =
+        await apiFetch(
+          `/rooms/${id}/entries`,
+          {
+            method: 'POST',
 
-          headers: {
-            'Content-Type':
-              'application/json',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+
+            body: JSON.stringify(
+              payload,
+            ),
           },
-
-          body: JSON.stringify(payload),
-        },
-      );
+        );
 
       if (!response.ok) {
         const responseText =
@@ -190,15 +212,23 @@ export default function CreateEntryScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      edges={['bottom']}
+    >
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={
+          styles.content
+        }
+        keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.title}>
           Dodaj wpis
         </Text>
 
-        <Text style={styles.subtitle}>
+        <Text
+          style={styles.subtitle}
+        >
           Dodaj informację do dokumentacji
           pomieszczenia.
         </Text>
@@ -207,7 +237,9 @@ export default function CreateEntryScreen() {
           Kategoria
         </Text>
 
-        <View style={styles.categories}>
+        <View
+          style={styles.categories}
+        >
           {categories.map((item) => {
             const selected =
               category === item.value;
@@ -216,18 +248,26 @@ export default function CreateEntryScreen() {
               <Pressable
                 key={item.value}
                 onPress={() => {
-                  setCategory(item.value);
+                  setCategory(
+                    item.value,
+                  );
                 }}
-                style={({ pressed }) => [
+                style={({
+                  pressed,
+                }) => [
                   styles.categoryButton,
+
                   selected &&
                     styles.categoryButtonSelected,
+
                   pressed &&
                     styles.pressed,
                 ]}
               >
                 <Text
-                  style={styles.categoryIcon}
+                  style={
+                    styles.categoryIcon
+                  }
                 >
                   {item.icon}
                 </Text>
@@ -235,6 +275,7 @@ export default function CreateEntryScreen() {
                 <Text
                   style={[
                     styles.categoryLabel,
+
                     selected &&
                       styles.categoryLabelSelected,
                   ]}
@@ -263,7 +304,9 @@ export default function CreateEntryScreen() {
 
         <TextInput
           value={description}
-          onChangeText={setDescription}
+          onChangeText={
+            setDescription
+          }
           style={[
             styles.input,
             styles.textArea,
@@ -278,13 +321,18 @@ export default function CreateEntryScreen() {
           onPress={handleSave}
           style={({ pressed }) => [
             styles.saveButton,
-            pressed && styles.pressed,
+
+            pressed &&
+              styles.pressed,
+
             isSaving &&
               styles.disabled,
           ]}
         >
           <Text
-            style={styles.saveButtonText}
+            style={
+              styles.saveButtonText
+            }
           >
             {isSaving
               ? 'Zapisywanie...'
@@ -293,10 +341,16 @@ export default function CreateEntryScreen() {
         </Pressable>
 
         <Pressable
-          onPress={() => router.back()}
-          style={styles.cancelButton}
+          onPress={() =>
+            router.back()
+          }
+          style={
+            styles.cancelButton
+          }
         >
-          <Text style={styles.cancelText}>
+          <Text
+            style={styles.cancelText}
+          >
             Anuluj
           </Text>
         </Pressable>

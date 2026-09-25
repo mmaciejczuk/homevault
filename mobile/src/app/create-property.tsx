@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
+
 import { useState } from 'react';
+
 import {
   Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,61 +14,124 @@ import {
   View,
 } from 'react-native';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://homevault-production.up.railway.app';
+import {
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+
+import { apiFetch } from '../lib/api';
 
 export default function CreatePropertyScreen() {
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [yearBuilt, setYearBuilt] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+  const [name, setName] =
+    useState('');
 
-  const showMessage = (title: string, message: string) => {
+  const [address, setAddress] =
+    useState('');
+
+  const [yearBuilt, setYearBuilt] =
+    useState('');
+
+  const [isSaving, setIsSaving] =
+    useState(false);
+
+  const showMessage = (
+    title: string,
+    message: string,
+  ) => {
     if (Platform.OS === 'web') {
-      window.alert(`${title}\n\n${message}`);
+      window.alert(
+        `${title}\n\n${message}`,
+      );
+
       return;
     }
 
-    Alert.alert(title, message);
+    Alert.alert(
+      title,
+      message,
+    );
   };
 
   const handleSave = async () => {
-    const trimmedName = name.trim();
+    const trimmedName =
+      name.trim();
 
     if (!trimmedName) {
-      showMessage('Brak nazwy', 'Podaj nazwę nieruchomości.');
+      showMessage(
+        'Brak nazwy',
+        'Podaj nazwę nieruchomości.',
+      );
+
       return;
     }
 
-    const parsedYearBuilt = yearBuilt
-      ? Number(yearBuilt)
-      : undefined;
+    const parsedYearBuilt =
+      yearBuilt
+        ? Number(yearBuilt)
+        : undefined;
+
+    if (
+      parsedYearBuilt !== undefined &&
+      (
+        !Number.isInteger(
+          parsedYearBuilt,
+        ) ||
+        parsedYearBuilt < 1000 ||
+        parsedYearBuilt > 9999
+      )
+    ) {
+      showMessage(
+        'Nieprawidłowy rok',
+        'Podaj poprawny czterocyfrowy rok budowy.',
+      );
+
+      return;
+    }
 
     const property = {
       name: trimmedName,
-      address: address.trim() || undefined,
-      yearBuilt: parsedYearBuilt,
+      address:
+        address.trim() ||
+        undefined,
+      yearBuilt:
+        parsedYearBuilt,
     };
 
     try {
       setIsSaving(true);
 
-      console.log('Wysyłam do API:', property);
+      console.log(
+        'Wysyłam do API:',
+        property,
+      );
 
-      const response = await fetch(`${API_URL}/properties`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(property),
-      });
+      const response =
+        await apiFetch(
+          '/properties',
+          {
+            method: 'POST',
+
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+
+            body: JSON.stringify(
+              property,
+            ),
+          },
+        );
 
       if (!response.ok) {
+        const responseBody =
+          await response.text();
+
         throw new Error(
-          `API zwróciło status ${response.status}`,
+          `API zwróciło status ${response.status}: ${responseBody}`,
         );
       }
 
-      const createdProperty = await response.json();
+      const createdProperty =
+        await response.json();
 
       console.log(
         'Nieruchomość zapisana:',
@@ -81,7 +145,10 @@ export default function CreatePropertyScreen() {
 
       router.replace('/');
     } catch (error) {
-      console.error('Błąd zapisu:', error);
+      console.error(
+        'Błąd zapisu:',
+        error,
+      );
 
       showMessage(
         'Błąd',
@@ -93,24 +160,44 @@ export default function CreatePropertyScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      edges={['bottom']}
+    >
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={
+          Platform.OS === 'ios'
+            ? 'padding'
+            : undefined
+        }
       >
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={
+            styles.content
+          }
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.title}>Dodaj dom</Text>
+          <Text style={styles.title}>
+            Dodaj dom
+          </Text>
 
-          <Text style={styles.subtitle}>
-            Podaj podstawowe informacje o nieruchomości.
+          <Text
+            style={styles.subtitle}
+          >
+            Podaj podstawowe informacje
+            o nieruchomości.
           </Text>
 
           <View style={styles.form}>
-            <View style={styles.field}>
-              <Text style={styles.label}>Nazwa *</Text>
+            <View
+              style={styles.field}
+            >
+              <Text
+                style={styles.label}
+              >
+                Nazwa *
+              </Text>
 
               <TextInput
                 style={styles.input}
@@ -121,27 +208,46 @@ export default function CreatePropertyScreen() {
               />
             </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Adres</Text>
+            <View
+              style={styles.field}
+            >
+              <Text
+                style={styles.label}
+              >
+                Adres
+              </Text>
 
               <TextInput
                 style={styles.input}
                 value={address}
-                onChangeText={setAddress}
+                onChangeText={
+                  setAddress
+                }
                 placeholder="np. ul. Przykładowa 10"
                 placeholderTextColor="#9CA3AF"
               />
             </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Rok budowy</Text>
+            <View
+              style={styles.field}
+            >
+              <Text
+                style={styles.label}
+              >
+                Rok budowy
+              </Text>
 
               <TextInput
                 style={styles.input}
                 value={yearBuilt}
-                onChangeText={(value) => {
+                onChangeText={(
+                  value,
+                ) => {
                   setYearBuilt(
-                    value.replace(/[^0-9]/g, ''),
+                    value.replace(
+                      /[^0-9]/g,
+                      '',
+                    ),
                   );
                 }}
                 placeholder="np. 2026"
@@ -155,21 +261,39 @@ export default function CreatePropertyScreen() {
               disabled={isSaving}
               style={({ pressed }) => [
                 styles.saveButton,
-                pressed && styles.buttonPressed,
-                isSaving && styles.buttonDisabled,
+
+                pressed &&
+                  styles.buttonPressed,
+
+                isSaving &&
+                  styles.buttonDisabled,
               ]}
               onPress={handleSave}
             >
-              <Text style={styles.saveButtonText}>
-                {isSaving ? 'Zapisywanie...' : 'Zapisz'}
+              <Text
+                style={
+                  styles.saveButtonText
+                }
+              >
+                {isSaving
+                  ? 'Zapisywanie...'
+                  : 'Zapisz'}
               </Text>
             </Pressable>
 
             <Pressable
-              style={styles.cancelButton}
-              onPress={() => router.back()}
+              style={
+                styles.cancelButton
+              }
+              onPress={() =>
+                router.back()
+              }
             >
-              <Text style={styles.cancelButtonText}>
+              <Text
+                style={
+                  styles.cancelButtonText
+                }
+              >
                 Anuluj
               </Text>
             </Pressable>

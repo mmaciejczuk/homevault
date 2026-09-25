@@ -4,19 +4,25 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
-import { useCallback, useState } from 'react';
+import {
+  useCallback,
+  useState,
+} from 'react';
 
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://homevault-production.up.railway.app';
+import {
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+
+import { apiFetch } from '../../lib/api';
 
 interface Property {
   id: number;
@@ -52,84 +58,108 @@ interface Entry {
   updatedAt: string;
 }
 
-const categoryLabels: Record<EntryCategory, string> = {
-  ELECTRICAL: 'Elektryka',
-  PLUMBING: 'Hydraulika',
-  HEATING: 'Ogrzewanie',
-  WALL: 'Ściany',
-  FLOOR: 'Podłoga',
-  DEVICE: 'Urządzenie',
-  NOTE: 'Notatka',
-  OTHER: 'Inne',
-};
+const categoryLabels:
+  Record<EntryCategory, string> = {
+    ELECTRICAL: 'Elektryka',
+    PLUMBING: 'Hydraulika',
+    HEATING: 'Ogrzewanie',
+    WALL: 'Ściany',
+    FLOOR: 'Podłoga',
+    DEVICE: 'Urządzenie',
+    NOTE: 'Notatka',
+    OTHER: 'Inne',
+  };
 
-const categoryIcons: Record<EntryCategory, string> = {
-  ELECTRICAL: '⚡',
-  PLUMBING: '💧',
-  HEATING: '🔥',
-  WALL: '🧱',
-  FLOOR: '🪵',
-  DEVICE: '🔧',
-  NOTE: '📝',
-  OTHER: '📌',
-};
+const categoryIcons:
+  Record<EntryCategory, string> = {
+    ELECTRICAL: '⚡',
+    PLUMBING: '💧',
+    HEATING: '🔥',
+    WALL: '🧱',
+    FLOOR: '🪵',
+    DEVICE: '🔧',
+    NOTE: '📝',
+    OTHER: '📌',
+  };
 
 export default function RoomDetailsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } =
+    useLocalSearchParams<{ id: string }>();
 
-  const [room, setRoom] = useState<Room | null>(null);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [room, setRoom] =
+    useState<Room | null>(null);
 
-  const loadData = useCallback(async () => {
-    if (!id) {
-      return;
-    }
+  const [entries, setEntries] =
+    useState<Entry[]>([]);
 
-    try {
-      setIsLoading(true);
-      setError(null);
+  const [isLoading, setIsLoading] =
+    useState(true);
 
-      const [roomResponse, entriesResponse] =
-        await Promise.all([
-          fetch(`${API_URL}/rooms/${id}`),
-          fetch(`${API_URL}/rooms/${id}/entries`),
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const loadData =
+    useCallback(async () => {
+      if (!id) {
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        const [
+          roomResponse,
+          entriesResponse,
+        ] = await Promise.all([
+          apiFetch(
+            `/rooms/${id}`,
+          ),
+
+          apiFetch(
+            `/rooms/${id}/entries`,
+          ),
         ]);
 
-      if (!roomResponse.ok) {
-        throw new Error(
-          `Room API zwróciło status ${roomResponse.status}`,
+        if (!roomResponse.ok) {
+          const responseBody =
+            await roomResponse.text();
+
+          throw new Error(
+            `Room API zwróciło status ${roomResponse.status}: ${responseBody}`,
+          );
+        }
+
+        if (!entriesResponse.ok) {
+          const responseBody =
+            await entriesResponse.text();
+
+          throw new Error(
+            `Entries API zwróciło status ${entriesResponse.status}: ${responseBody}`,
+          );
+        }
+
+        const roomData: Room =
+          await roomResponse.json();
+
+        const entriesData: Entry[] =
+          await entriesResponse.json();
+
+        setRoom(roomData);
+        setEntries(entriesData);
+      } catch (err) {
+        console.error(
+          'Błąd pobierania pomieszczenia:',
+          err,
         );
-      }
 
-      if (!entriesResponse.ok) {
-        throw new Error(
-          `Entries API zwróciło status ${entriesResponse.status}`,
+        setError(
+          'Nie udało się pobrać danych pomieszczenia.',
         );
+      } finally {
+        setIsLoading(false);
       }
-
-      const roomData: Room =
-        await roomResponse.json();
-
-      const entriesData: Entry[] =
-        await entriesResponse.json();
-
-      setRoom(roomData);
-      setEntries(entriesData);
-    } catch (err) {
-      console.error(
-        'Błąd pobierania pomieszczenia:',
-        err,
-      );
-
-      setError(
-        'Nie udało się pobrać danych pomieszczenia.',
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [id]);
+    }, [id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -139,16 +169,22 @@ export default function RoomDetailsScreen() {
 
   const handleAddEntry = () => {
     router.push({
-      pathname: '/room/[id]/create-entry',
+      pathname:
+        '/room/[id]/create-entry',
+
       params: {
         id,
       },
     });
   };
 
-  const handleOpenEntry = (entryId: number) => {
+  const handleOpenEntry = (
+    entryId: number,
+  ) => {
     router.push({
-      pathname: '/entry/[id]',
+      pathname:
+        '/entry/[id]',
+
       params: {
         id: entryId.toString(),
       },
@@ -157,11 +193,18 @@ export default function RoomDetailsScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView
+        style={styles.container}
+        edges={['bottom']}
+      >
         <View style={styles.center}>
-          <ActivityIndicator size="large" />
+          <ActivityIndicator
+            size="large"
+          />
 
-          <Text style={styles.infoText}>
+          <Text
+            style={styles.infoText}
+          >
             Pobieranie pomieszczenia...
           </Text>
         </View>
@@ -171,13 +214,20 @@ export default function RoomDetailsScreen() {
 
   if (error || !room) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView
+        style={styles.container}
+        edges={['bottom']}
+      >
         <View style={styles.center}>
-          <Text style={styles.errorTitle}>
+          <Text
+            style={styles.errorTitle}
+          >
             Wystąpił błąd
           </Text>
 
-          <Text style={styles.infoText}>
+          <Text
+            style={styles.infoText}
+          >
             {error}
           </Text>
 
@@ -185,7 +235,9 @@ export default function RoomDetailsScreen() {
             style={styles.button}
             onPress={loadData}
           >
-            <Text style={styles.buttonText}>
+            <Text
+              style={styles.buttonText}
+            >
               Spróbuj ponownie
             </Text>
           </Pressable>
@@ -195,32 +247,51 @@ export default function RoomDetailsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      edges={['bottom']}
+    >
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={
+          styles.content
+        }
       >
-        <Text style={styles.roomIcon}>
+        <Text
+          style={styles.roomIcon}
+        >
           🚪
         </Text>
 
-        <Text style={styles.roomName}>
+        <Text
+          style={styles.roomName}
+        >
           {room.name}
         </Text>
 
         {room.floor && (
-          <Text style={styles.roomDetail}>
+          <Text
+            style={styles.roomDetail}
+          >
             {room.floor}
           </Text>
         )}
 
         {room.description && (
-          <Text style={styles.roomDescription}>
+          <Text
+            style={
+              styles.roomDescription
+            }
+          >
             {room.description}
           </Text>
         )}
 
-        <View style={styles.headerRow}>
-          <Text style={styles.sectionTitle}>
+        <View
+          style={styles.headerRow}
+        >
+          <Text
+            style={styles.sectionTitle}
+          >
             Dokumentacja
           </Text>
 
@@ -229,10 +300,15 @@ export default function RoomDetailsScreen() {
               onPress={handleAddEntry}
               style={({ pressed }) => [
                 styles.smallButton,
-                pressed && styles.pressed,
+                pressed &&
+                  styles.pressed,
               ]}
             >
-              <Text style={styles.smallButtonText}>
+              <Text
+                style={
+                  styles.smallButtonText
+                }
+              >
                 + Dodaj
               </Text>
             </Pressable>
@@ -240,16 +316,24 @@ export default function RoomDetailsScreen() {
         </View>
 
         {entries.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>
+          <View
+            style={styles.emptyState}
+          >
+            <Text
+              style={styles.emptyIcon}
+            >
               📋
             </Text>
 
-            <Text style={styles.emptyTitle}>
+            <Text
+              style={styles.emptyTitle}
+            >
               Brak wpisów
             </Text>
 
-            <Text style={styles.infoText}>
+            <Text
+              style={styles.infoText}
+            >
               Dodaj pierwszy wpis dotyczący
               instalacji, urządzenia lub prac
               wykonanych w tym pomieszczeniu.
@@ -259,25 +343,33 @@ export default function RoomDetailsScreen() {
               onPress={handleAddEntry}
               style={({ pressed }) => [
                 styles.button,
-                pressed && styles.pressed,
+                pressed &&
+                  styles.pressed,
               ]}
             >
-              <Text style={styles.buttonText}>
+              <Text
+                style={styles.buttonText}
+              >
                 + Dodaj wpis
               </Text>
             </Pressable>
           </View>
         ) : (
-          <View style={styles.entriesList}>
+          <View
+            style={styles.entriesList}
+          >
             {entries.map((entry) => (
               <Pressable
                 key={entry.id}
                 style={({ pressed }) => [
                   styles.entryCard,
-                  pressed && styles.pressed,
+                  pressed &&
+                    styles.pressed,
                 ]}
                 onPress={() =>
-                  handleOpenEntry(entry.id)
+                  handleOpenEntry(
+                    entry.id,
+                  )
                 }
               >
                 <View
@@ -285,7 +377,11 @@ export default function RoomDetailsScreen() {
                     styles.entryIconContainer
                   }
                 >
-                  <Text style={styles.entryIcon}>
+                  <Text
+                    style={
+                      styles.entryIcon
+                    }
+                  >
                     {
                       categoryIcons[
                         entry.category
@@ -294,9 +390,15 @@ export default function RoomDetailsScreen() {
                   </Text>
                 </View>
 
-                <View style={styles.entryContent}>
+                <View
+                  style={
+                    styles.entryContent
+                  }
+                >
                   <Text
-                    style={styles.entryCategory}
+                    style={
+                      styles.entryCategory
+                    }
                   >
                     {
                       categoryLabels[
@@ -305,7 +407,11 @@ export default function RoomDetailsScreen() {
                     }
                   </Text>
 
-                  <Text style={styles.entryTitle}>
+                  <Text
+                    style={
+                      styles.entryTitle
+                    }
+                  >
                     {entry.title}
                   </Text>
 
@@ -316,12 +422,16 @@ export default function RoomDetailsScreen() {
                       }
                       numberOfLines={2}
                     >
-                      {entry.description}
+                      {
+                        entry.description
+                      }
                     </Text>
                   )}
                 </View>
 
-                <Text style={styles.arrow}>
+                <Text
+                  style={styles.arrow}
+                >
                   ›
                 </Text>
               </Pressable>

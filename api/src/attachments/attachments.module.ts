@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AuthModule } from '../auth/auth.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';
 
@@ -10,6 +11,7 @@ import { AttachmentsService } from './attachments.service';
   imports: [
     PrismaModule,
     StorageModule,
+    AuthModule,
   ],
 
   controllers: [

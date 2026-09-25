@@ -17,18 +17,31 @@ export class AttachmentsService {
     private readonly storage: StorageService,
   ) {}
 
-  async findByEntry(entryId: number) {
-    const entry = await this.prisma.entry.findUnique({
-      where: {
-        id: entryId,
-      },
-      select: {
-        id: true,
-      },
-    });
+  async findByEntry(
+    entryId: number,
+    ownerId: string,
+  ) {
+    const entry =
+      await this.prisma.entry.findFirst({
+        where: {
+          id: entryId,
+
+          room: {
+            property: {
+              ownerId,
+            },
+          },
+        },
+
+        select: {
+          id: true,
+        },
+      });
 
     if (!entry) {
-      throw new NotFoundException('Entry not found');
+      throw new NotFoundException(
+        'Entry not found',
+      );
     }
 
     const attachments =
@@ -36,41 +49,55 @@ export class AttachmentsService {
         where: {
           entryId,
         },
+
         orderBy: {
           createdAt: 'desc',
         },
       });
 
     return Promise.all(
-      attachments.map(async (attachment) => {
-        const url =
-          await this.storage.createSignedUrl(
-            attachment.storagePath,
-          );
+      attachments.map(
+        async (attachment) => {
+          const url =
+            await this.storage.createSignedUrl(
+              attachment.storagePath,
+            );
 
-        return {
-          ...attachment,
-          url,
-        };
-      }),
+          return {
+            ...attachment,
+            url,
+          };
+        },
+      ),
     );
   }
 
   async upload(
     entryId: number,
     file: Express.Multer.File,
+    ownerId: string,
   ) {
-    const entry = await this.prisma.entry.findUnique({
-      where: {
-        id: entryId,
-      },
-      select: {
-        id: true,
-      },
-    });
+    const entry =
+      await this.prisma.entry.findFirst({
+        where: {
+          id: entryId,
+
+          room: {
+            property: {
+              ownerId,
+            },
+          },
+        },
+
+        select: {
+          id: true,
+        },
+      });
 
     if (!entry) {
-      throw new NotFoundException('Entry not found');
+      throw new NotFoundException(
+        'Entry not found',
+      );
     }
 
     if (!file) {
@@ -79,17 +106,24 @@ export class AttachmentsService {
       );
     }
 
-    if (!file.mimetype.startsWith('image/')) {
+    if (
+      !file.mimetype.startsWith(
+        'image/',
+      )
+    ) {
       throw new BadRequestException(
         'Only image files are supported',
       );
     }
 
     const originalExtension =
-      extname(file.originalname).toLowerCase();
+      extname(
+        file.originalname,
+      ).toLowerCase();
 
     const extension =
-      originalExtension || '.jpg';
+      originalExtension ||
+      '.jpg';
 
     const storagePath =
       `entries/${entryId}/` +
@@ -105,11 +139,20 @@ export class AttachmentsService {
       const attachment =
         await this.prisma.attachment.create({
           data: {
-            fileName: file.originalname,
+            fileName:
+              file.originalname,
+
             storagePath,
-            mimeType: file.mimetype,
-            size: file.size,
-            kind: 'IMAGE',
+
+            mimeType:
+              file.mimetype,
+
+            size:
+              file.size,
+
+            kind:
+              'IMAGE',
+
             entryId,
           },
         });
@@ -126,17 +169,30 @@ export class AttachmentsService {
     } catch (error) {
       await this.storage
         .remove(storagePath)
-        .catch(() => undefined);
+        .catch(
+          () => undefined,
+        );
 
       throw error;
     }
   }
 
-  async remove(id: number) {
+  async remove(
+    id: number,
+    ownerId: string,
+  ) {
     const attachment =
-      await this.prisma.attachment.findUnique({
+      await this.prisma.attachment.findFirst({
         where: {
           id,
+
+          entry: {
+            room: {
+              property: {
+                ownerId,
+              },
+            },
+          },
         },
       });
 
@@ -152,13 +208,13 @@ export class AttachmentsService {
 
     await this.prisma.attachment.delete({
       where: {
-        id,
+        id: attachment.id,
       },
     });
 
     return {
       success: true,
-      id,
+      id: attachment.id,
     };
   }
 }

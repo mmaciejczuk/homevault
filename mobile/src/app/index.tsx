@@ -1,16 +1,27 @@
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import {
+  router,
+  useFocusEffect,
+} from 'expo-router';
+
+import {
+  useCallback,
+  useState,
+} from 'react';
+
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://homevault-production.up.railway.app';
+import {
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+
+import { apiFetch } from '../lib/api';
 
 interface Property {
   id: number;
@@ -20,36 +31,59 @@ interface Property {
 }
 
 export default function HomeScreen() {
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [properties, setProperties] =
+    useState<Property[]>([]);
 
-  const loadProperties = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
+  const [isLoading, setIsLoading] =
+    useState(true);
 
-      console.log('Pobieram nieruchomości...');
+  const [error, setError] =
+    useState<string | null>(null);
 
-      const response = await fetch(`${API_URL}/properties`);
+  const loadProperties =
+    useCallback(async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
 
-      if (!response.ok) {
-        throw new Error(`API zwróciło status ${response.status}`);
+        console.log(
+          'Pobieram nieruchomości...',
+        );
+
+        const response =
+          await apiFetch('/properties');
+
+        if (!response.ok) {
+          const responseBody =
+            await response.text();
+
+          throw new Error(
+            `API zwróciło status ${response.status}: ${responseBody}`,
+          );
+        }
+
+        const data: Property[] =
+          await response.json();
+
+        console.log(
+          'Pobrane nieruchomości:',
+          data,
+        );
+
+        setProperties(data);
+      } catch (err) {
+        console.error(
+          'Błąd pobierania nieruchomości:',
+          err,
+        );
+
+        setError(
+          'Nie udało się pobrać nieruchomości.',
+        );
+      } finally {
+        setIsLoading(false);
       }
-
-      const data: Property[] = await response.json();
-
-      console.log('Pobrane nieruchomości:', data);
-
-      setProperties(data);
-    } catch (err) {
-      console.error('Błąd pobierania nieruchomości:', err);
-
-      setError('Nie udało się pobrać nieruchomości.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -62,10 +96,15 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      edges={['top']}
+    >
       <View style={styles.header}>
         <View>
-          <Text style={styles.logo}>HomeVault</Text>
+          <Text style={styles.logo}>
+            HomeVault
+          </Text>
 
           <Text style={styles.subtitle}>
             Twoja cyfrowa dokumentacja domu
@@ -75,29 +114,44 @@ export default function HomeScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={
+          styles.content
+        }
       >
         <View style={styles.titleRow}>
-          <Text style={styles.title}>Moje domy</Text>
+          <Text style={styles.title}>
+            Moje domy
+          </Text>
 
           {properties.length > 0 && (
             <Pressable
               onPress={handleAddProperty}
               style={({ pressed }) => [
                 styles.smallAddButton,
-                pressed && styles.buttonPressed,
+                pressed &&
+                  styles.buttonPressed,
               ]}
             >
-              <Text style={styles.smallAddButtonText}>+ Dodaj</Text>
+              <Text
+                style={
+                  styles.smallAddButtonText
+                }
+              >
+                + Dodaj
+              </Text>
             </Pressable>
           )}
         </View>
 
         {isLoading && (
           <View style={styles.center}>
-            <ActivityIndicator size="large" />
+            <ActivityIndicator
+              size="large"
+            />
 
-            <Text style={styles.loadingText}>
+            <Text
+              style={styles.loadingText}
+            >
               Pobieranie nieruchomości...
             </Text>
           </View>
@@ -105,11 +159,17 @@ export default function HomeScreen() {
 
         {!isLoading && error && (
           <View style={styles.center}>
-            <Text style={styles.errorTitle}>
+            <Text
+              style={styles.errorTitle}
+            >
               Nie udało się pobrać danych
             </Text>
 
-            <Text style={styles.errorDescription}>
+            <Text
+              style={
+                styles.errorDescription
+              }
+            >
               {error}
             </Text>
 
@@ -117,88 +177,164 @@ export default function HomeScreen() {
               onPress={loadProperties}
               style={({ pressed }) => [
                 styles.button,
-                pressed && styles.buttonPressed,
+                pressed &&
+                  styles.buttonPressed,
               ]}
             >
-              <Text style={styles.buttonText}>
+              <Text
+                style={styles.buttonText}
+              >
                 Spróbuj ponownie
               </Text>
             </Pressable>
           </View>
         )}
 
-        {!isLoading && !error && properties.length === 0 && (
-          <View style={styles.emptyState}>
-            <Text style={styles.houseIcon}>🏠</Text>
-
-            <Text style={styles.emptyTitle}>
-              Nie masz jeszcze żadnej nieruchomości
-            </Text>
-
-            <Text style={styles.emptyDescription}>
-              Dodaj swój pierwszy dom, aby rozpocząć dokumentowanie instalacji,
-              urządzeń, zdjęć i dokumentów.
-            </Text>
-
-            <Pressable
-              onPress={handleAddProperty}
-              style={({ pressed }) => [
-                styles.button,
-                pressed && styles.buttonPressed,
-              ]}
+        {!isLoading &&
+          !error &&
+          properties.length === 0 && (
+            <View
+              style={styles.emptyState}
             >
-              <Text style={styles.buttonText}>
-                + Dodaj dom
-              </Text>
-            </Pressable>
-          </View>
-        )}
-
-        {!isLoading && !error && properties.length > 0 && (
-          <View style={styles.propertiesList}>
-            {properties.map((property) => (
-              <Pressable
-                key={property.id}
-                style={({ pressed }) => [
-                  styles.propertyCard,
-                  pressed && styles.propertyCardPressed,
-                ]}
-                onPress={() => {
-                    router.push({
-                    pathname: '/property/[id]',
-                    params: {
-                      id: property.id.toString(),
-                    },
-                  });
-                }}
+              <Text
+                style={styles.houseIcon}
               >
-                <View style={styles.propertyIconContainer}>
-                  <Text style={styles.propertyIcon}>🏠</Text>
-                </View>
+                🏠
+              </Text>
 
-                <View style={styles.propertyInfo}>
-                  <Text style={styles.propertyName}>
-                    {property.name}
-                  </Text>
+              <Text
+                style={styles.emptyTitle}
+              >
+                Nie masz jeszcze żadnej
+                nieruchomości
+              </Text>
 
-                  {property.address && (
-                    <Text style={styles.propertyDetail}>
-                      📍 {property.address}
-                    </Text>
-                  )}
+              <Text
+                style={
+                  styles.emptyDescription
+                }
+              >
+                Dodaj swój pierwszy dom,
+                aby rozpocząć
+                dokumentowanie instalacji,
+                urządzeń, zdjęć i
+                dokumentów.
+              </Text>
 
-                  {property.yearBuilt && (
-                    <Text style={styles.propertyDetail}>
-                      Rok budowy: {property.yearBuilt}
-                    </Text>
-                  )}
-                </View>
-
-                <Text style={styles.arrow}>›</Text>
+              <Pressable
+                onPress={
+                  handleAddProperty
+                }
+                style={({ pressed }) => [
+                  styles.button,
+                  pressed &&
+                    styles.buttonPressed,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.buttonText
+                  }
+                >
+                  + Dodaj dom
+                </Text>
               </Pressable>
-            ))}
-          </View>
-        )}
+            </View>
+          )}
+
+        {!isLoading &&
+          !error &&
+          properties.length > 0 && (
+            <View
+              style={
+                styles.propertiesList
+              }
+            >
+              {properties.map(
+                (property) => (
+                  <Pressable
+                    key={property.id}
+                    style={({
+                      pressed,
+                    }) => [
+                      styles.propertyCard,
+                      pressed &&
+                        styles.propertyCardPressed,
+                    ]}
+                    onPress={() => {
+                      router.push({
+                        pathname:
+                          '/property/[id]',
+                        params: {
+                          id: property.id.toString(),
+                        },
+                      });
+                    }}
+                  >
+                    <View
+                      style={
+                        styles.propertyIconContainer
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.propertyIcon
+                        }
+                      >
+                        🏠
+                      </Text>
+                    </View>
+
+                    <View
+                      style={
+                        styles.propertyInfo
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.propertyName
+                        }
+                      >
+                        {property.name}
+                      </Text>
+
+                      {property.address && (
+                        <Text
+                          style={
+                            styles.propertyDetail
+                          }
+                        >
+                          📍{' '}
+                          {
+                            property.address
+                          }
+                        </Text>
+                      )}
+
+                      {property.yearBuilt && (
+                        <Text
+                          style={
+                            styles.propertyDetail
+                          }
+                        >
+                          Rok budowy:{' '}
+                          {
+                            property.yearBuilt
+                          }
+                        </Text>
+                      )}
+                    </View>
+
+                    <Text
+                      style={styles.arrow}
+                    >
+                      ›
+                    </Text>
+                  </Pressable>
+                ),
+              )}
+            </View>
+          )}
       </ScrollView>
     </SafeAreaView>
   );

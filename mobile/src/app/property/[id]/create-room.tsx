@@ -1,10 +1,14 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import {
+  router,
+  useLocalSearchParams,
+} from 'expo-router';
+
 import { useState } from 'react';
+
 import {
   Alert,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,29 +16,58 @@ import {
   View,
 } from 'react-native';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://homevault-production.up.railway.app';
+import {
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+
+import { apiFetch } from '../../../lib/api';
 
 export default function CreateRoomScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } =
+    useLocalSearchParams<{ id: string }>();
 
-  const [name, setName] = useState('');
-  const [floor, setFloor] = useState('');
-  const [description, setDescription] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+  const [name, setName] =
+    useState('');
+
+  const [floor, setFloor] =
+    useState('');
+
+  const [
+    description,
+    setDescription,
+  ] = useState('');
+
+  const [isSaving, setIsSaving] =
+    useState(false);
 
   const showMessage = (
     title: string,
     message: string,
   ) => {
     if (Platform.OS === 'web') {
-      window.alert(`${title}\n\n${message}`);
+      window.alert(
+        `${title}\n\n${message}`,
+      );
+
       return;
     }
 
-    Alert.alert(title, message);
+    Alert.alert(
+      title,
+      message,
+    );
   };
 
   const handleSave = async () => {
+    if (!id) {
+      showMessage(
+        'Błąd',
+        'Brak identyfikatora domu.',
+      );
+
+      return;
+    }
+
     if (!name.trim()) {
       showMessage(
         'Brak nazwy',
@@ -49,9 +82,12 @@ export default function CreateRoomScreen() {
 
       const payload = {
         name: name.trim(),
-        floor: floor.trim() || undefined,
+        floor:
+          floor.trim() ||
+          undefined,
         description:
-          description.trim() || undefined,
+          description.trim() ||
+          undefined,
       };
 
       console.log(
@@ -59,20 +95,29 @@ export default function CreateRoomScreen() {
         payload,
       );
 
-      const response = await fetch(
-        `${API_URL}/properties/${id}/rooms`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+      const response =
+        await apiFetch(
+          `/properties/${id}/rooms`,
+          {
+            method: 'POST',
+
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+
+            body: JSON.stringify(
+              payload,
+            ),
           },
-          body: JSON.stringify(payload),
-        },
-      );
+        );
 
       if (!response.ok) {
+        const responseBody =
+          await response.text();
+
         throw new Error(
-          `API zwróciło status ${response.status}`,
+          `API zwróciło status ${response.status}: ${responseBody}`,
         );
       }
 
@@ -106,9 +151,15 @@ export default function CreateRoomScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      edges={['bottom']}
+    >
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={
+          styles.content
+        }
+        keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.title}>
           Dodaj pomieszczenie
@@ -147,7 +198,9 @@ export default function CreateRoomScreen() {
 
           <TextInput
             value={description}
-            onChangeText={setDescription}
+            onChangeText={
+              setDescription
+            }
             style={[
               styles.input,
               styles.textArea,
@@ -162,11 +215,19 @@ export default function CreateRoomScreen() {
             onPress={handleSave}
             style={({ pressed }) => [
               styles.saveButton,
-              pressed && styles.pressed,
-              isSaving && styles.disabled,
+
+              pressed &&
+                styles.pressed,
+
+              isSaving &&
+                styles.disabled,
             ]}
           >
-            <Text style={styles.saveButtonText}>
+            <Text
+              style={
+                styles.saveButtonText
+              }
+            >
               {isSaving
                 ? 'Zapisywanie...'
                 : 'Zapisz'}
@@ -174,10 +235,16 @@ export default function CreateRoomScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.back()}
-            style={styles.cancelButton}
+            onPress={() =>
+              router.back()
+            }
+            style={
+              styles.cancelButton
+            }
           >
-            <Text style={styles.cancelText}>
+            <Text
+              style={styles.cancelText}
+            >
               Anuluj
             </Text>
           </Pressable>

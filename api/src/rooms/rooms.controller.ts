@@ -5,12 +5,21 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
+
+import { SupabaseAuthGuard } from '../auth/auth.guard';
+
+import type {
+  AuthenticatedRequest,
+} from '../auth/auth.guard';
 
 import { CreateRoomDto } from './dto/create-room.dto';
 import { RoomsService } from './rooms.service';
 
 @Controller()
+@UseGuards(SupabaseAuthGuard)
 export class RoomsController {
   constructor(
     private readonly roomsService: RoomsService,
@@ -20,8 +29,14 @@ export class RoomsController {
   findByProperty(
     @Param('propertyId', ParseIntPipe)
     propertyId: number,
+
+    @Req()
+    request: AuthenticatedRequest,
   ) {
-    return this.roomsService.findByProperty(propertyId);
+    return this.roomsService.findByProperty(
+      propertyId,
+      request.user.id,
+    );
   }
 
   @Post('properties/:propertyId/rooms')
@@ -31,10 +46,14 @@ export class RoomsController {
 
     @Body()
     dto: CreateRoomDto,
+
+    @Req()
+    request: AuthenticatedRequest,
   ) {
     return this.roomsService.create(
       propertyId,
       dto,
+      request.user.id,
     );
   }
 
@@ -42,7 +61,13 @@ export class RoomsController {
   findOne(
     @Param('id', ParseIntPipe)
     id: number,
+
+    @Req()
+    request: AuthenticatedRequest,
   ) {
-    return this.roomsService.findOne(id);
+    return this.roomsService.findOne(
+      id,
+      request.user.id,
+    );
   }
 }
