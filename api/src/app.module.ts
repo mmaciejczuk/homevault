@@ -7,6 +7,7 @@ import { PropertiesModule } from './properties/properties.module';
 import { RoomsModule } from './rooms/rooms.module';
 import { EntriesModule } from './entries/entries.module';
 import { AttachmentsModule } from './attachments/attachments.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { AttachmentsModule } from './attachments/attachments.module';
     RoomsModule,
     EntriesModule,
     AttachmentsModule,
+    AuthModule,
   ],
 
   controllers: [
