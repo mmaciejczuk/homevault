@@ -1,11 +1,11 @@
-{
+﻿{
   "expo": {
     "name": "mobile",
     "slug": "homevault",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mobile",
+    "scheme": "homevault",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon"
@@ -34,7 +34,8 @@
           "imageWidth": 76
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -49,3 +50,4 @@
     "owner": "ma5i0s-team"
   }
 }
+

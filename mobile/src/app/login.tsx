@@ -1,5 +1,3 @@
-import { router } from 'expo-router';
-
 import {
   useState,
 } from 'react';
@@ -10,31 +8,57 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+} from 'react-native-safe-area-context';
 
-import { supabase } from '../lib/supabase';
+import {
+  signInWithGoogle,
+} from '../lib/googleAuth';
+
+import {
+  supabase,
+} from '../lib/supabase';
 
 export default function LoginScreen() {
-  const [email, setEmail] =
+  const [
+    email,
+    setEmail,
+  ] =
     useState('');
 
-  const [password, setPassword] =
+  const [
+    password,
+    setPassword,
+  ] =
     useState('');
 
-  const [isLoading, setIsLoading] =
+  const [
+    isLoading,
+    setIsLoading,
+  ] =
+    useState(false);
+
+  const [
+    isGoogleLoading,
+    setIsGoogleLoading,
+  ] =
     useState(false);
 
   const showMessage = (
     title: string,
     message: string,
   ) => {
-    if (Platform.OS === 'web') {
+    if (
+      Platform.OS === 'web'
+    ) {
       window.alert(
         `${title}\n\n${message}`,
       );
@@ -48,360 +72,674 @@ export default function LoginScreen() {
     );
   };
 
-  const validate = () => {
-    if (!email.trim()) {
+  const validateForm = () => {
+    const normalizedEmail =
+      email
+        .trim()
+        .toLowerCase();
+
+    if (!normalizedEmail) {
       showMessage(
         'Brak adresu e-mail',
         'Podaj adres e-mail.',
       );
 
-      return false;
+      return null;
     }
 
-    if (password.length < 6) {
+    if (!password) {
       showMessage(
-        'Hasło',
-        'Hasło musi mieć co najmniej 6 znaków.',
+        'Brak hasła',
+        'Podaj hasło.',
       );
 
-      return false;
+      return null;
     }
 
-    return true;
+    if (
+      password.length < 6
+    ) {
+      showMessage(
+        'Hasło jest za krótkie',
+        'Hasło powinno mieć co najmniej 6 znaków.',
+      );
+
+      return null;
+    }
+
+    return {
+      email:
+        normalizedEmail,
+
+      password,
+    };
   };
 
-  const handleLogin = async () => {
-    if (!validate()) {
-      return;
-    }
+  const handleSignIn =
+    async () => {
+      const credentials =
+        validateForm();
 
-    try {
-      setIsLoading(true);
-
-      const { error } =
-        await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-
-      if (error) {
-        throw error;
-      }
-
-      router.replace('/');
-    } catch (error) {
-      console.error(
-        'Błąd logowania:',
-        error,
-      );
-
-      showMessage(
-        'Nie udało się zalogować',
-        error instanceof Error
-          ? error.message
-          : 'Nieznany błąd.',
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRegister = async () => {
-    if (!validate()) {
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-
-      const {
-        data,
-        error,
-      } =
-        await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-        });
-
-      if (error) {
-        throw error;
-      }
-
-      if (!data.session) {
-        showMessage(
-          'Konto utworzone',
-          'Sprawdź skrzynkę e-mail i potwierdź konto.',
-        );
-
+      if (!credentials) {
         return;
       }
 
-      router.replace('/');
-    } catch (error) {
-      console.error(
-        'Błąd rejestracji:',
-        error,
-      );
+      try {
+        setIsLoading(true);
 
-      showMessage(
-        'Nie udało się utworzyć konta',
-        error instanceof Error
-          ? error.message
-          : 'Nieznany błąd.',
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        const {
+          error,
+        } =
+          await supabase.auth
+            .signInWithPassword(
+              credentials,
+            );
+
+        if (error) {
+          throw error;
+        }
+      } catch (error) {
+        console.error(
+          'Błąd logowania:',
+          error,
+        );
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Nie udało się zalogować.';
+
+        showMessage(
+          'Logowanie nieudane',
+          message,
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+  const handleRegister =
+    async () => {
+      const credentials =
+        validateForm();
+
+      if (!credentials) {
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+
+        const {
+          data,
+          error,
+        } =
+          await supabase.auth
+            .signUp(
+              credentials,
+            );
+
+        if (error) {
+          throw error;
+        }
+
+        if (
+          data.session
+        ) {
+          showMessage(
+            'Konto utworzone',
+            'Konto zostało utworzone i zalogowano Cię do HomeVault.',
+          );
+
+          return;
+        }
+
+        showMessage(
+          'Sprawdź pocztę',
+          'Konto zostało utworzone. Otwórz wiadomość od HomeVault i potwierdź adres e-mail.',
+        );
+      } catch (error) {
+        console.error(
+          'Błąd rejestracji:',
+          error,
+        );
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Nie udało się utworzyć konta.';
+
+        showMessage(
+          'Rejestracja nieudana',
+          message,
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+  const handleGoogleSignIn =
+    async () => {
+      try {
+        setIsGoogleLoading(
+          true,
+        );
+
+        await signInWithGoogle();
+      } catch (error) {
+        console.error(
+          'Błąd Google OAuth:',
+          error,
+        );
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Nie udało się zalogować przez Google.';
+
+        showMessage(
+          'Google',
+          message,
+        );
+      } finally {
+        setIsGoogleLoading(
+          false,
+        );
+      }
+    };
+
+  const isBusy =
+    isLoading ||
+    isGoogleLoading;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={
+        styles.container
+      }
+    >
       <KeyboardAvoidingView
-        style={styles.keyboard}
+        style={
+          styles.keyboardView
+        }
         behavior={
-          Platform.OS === 'ios'
+          Platform.OS ===
+          'ios'
             ? 'padding'
             : undefined
         }
       >
-        <View style={styles.card}>
-          <Text style={styles.logo}>
-            🏠
-          </Text>
-
-          <Text style={styles.title}>
-            HomeVault
-          </Text>
-
-          <Text style={styles.subtitle}>
-            Twoja cyfrowa dokumentacja domu
-          </Text>
-
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            placeholder="E-mail"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={styles.input}
-          />
-
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Hasło"
-            secureTextEntry
-            autoCapitalize="none"
-            style={styles.input}
-          />
-
-          <Pressable
-            disabled={isLoading}
-            onPress={handleLogin}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              pressed &&
-                styles.pressed,
-              isLoading &&
-                styles.disabled,
-            ]}
-          >
-            {isLoading ? (
-              <ActivityIndicator
-                color="#FFFFFF"
-              />
-            ) : (
-              <Text
-                style={
-                  styles.primaryButtonText
-                }
-              >
-                Zaloguj się
-              </Text>
-            )}
-          </Pressable>
-
-          <Pressable
-            disabled={isLoading}
-            onPress={handleRegister}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              pressed &&
-                styles.pressed,
-            ]}
+        <ScrollView
+          contentContainerStyle={
+            styles.content
+          }
+          keyboardShouldPersistTaps="handled"
+        >
+          <View
+            style={
+              styles.header
+            }
           >
             <Text
               style={
-                styles.secondaryButtonText
+                styles.logoIcon
               }
             >
-              Utwórz konto
+              🏠
             </Text>
-          </Pressable>
 
-          <View style={styles.divider}>
+            <Text
+              style={
+                styles.logo
+              }
+            >
+              HomeVault
+            </Text>
+
+            <Text
+              style={
+                styles.subtitle
+              }
+            >
+              Twoja cyfrowa
+              dokumentacja domu
+            </Text>
+          </View>
+
+          <View
+            style={
+              styles.card
+            }
+          >
+            <Text
+              style={
+                styles.title
+              }
+            >
+              Zaloguj się
+            </Text>
+
+            <Text
+              style={
+                styles.description
+              }
+            >
+              Uzyskaj dostęp do
+              swoich domów,
+              pomieszczeń,
+              dokumentacji
+              i zdjęć.
+            </Text>
+
+            <Pressable
+              disabled={
+                isBusy
+              }
+              onPress={
+                handleGoogleSignIn
+              }
+              style={({
+                pressed,
+              }) => [
+                styles.googleButton,
+
+                pressed &&
+                  styles.pressed,
+
+                isBusy &&
+                  styles.disabled,
+              ]}
+            >
+              {isGoogleLoading ? (
+                <ActivityIndicator />
+              ) : (
+                <>
+                  <View
+                    style={
+                      styles.googleIcon
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.googleIconText
+                      }
+                    >
+                      G
+                    </Text>
+                  </View>
+
+                  <Text
+                    style={
+                      styles.googleButtonText
+                    }
+                  >
+                    Kontynuuj z Google
+                  </Text>
+                </>
+              )}
+            </Pressable>
+
             <View
-              style={styles.dividerLine}
+              style={
+                styles.dividerRow
+              }
+            >
+              <View
+                style={
+                  styles.divider
+                }
+              />
+
+              <Text
+                style={
+                  styles.dividerText
+                }
+              >
+                lub
+              </Text>
+
+              <View
+                style={
+                  styles.divider
+                }
+              />
+            </View>
+
+            <Text
+              style={
+                styles.label
+              }
+            >
+              E-mail
+            </Text>
+
+            <TextInput
+              value={email}
+              onChangeText={
+                setEmail
+              }
+              placeholder="twoj@email.pl"
+              autoCapitalize="none"
+              autoCorrect={
+                false
+              }
+              keyboardType="email-address"
+              textContentType="emailAddress"
+              autoComplete="email"
+              editable={
+                !isBusy
+              }
+              style={
+                styles.input
+              }
             />
 
             <Text
-              style={styles.dividerText}
+              style={[
+                styles.label,
+                styles.passwordLabel,
+              ]}
             >
-              wkrótce
+              Hasło
             </Text>
 
-            <View
-              style={styles.dividerLine}
+            <TextInput
+              value={
+                password
+              }
+              onChangeText={
+                setPassword
+              }
+              placeholder="••••••••"
+              secureTextEntry
+              textContentType="password"
+              autoComplete="password"
+              editable={
+                !isBusy
+              }
+              style={
+                styles.input
+              }
             />
+
+            <Pressable
+              disabled={
+                isBusy
+              }
+              onPress={
+                handleSignIn
+              }
+              style={({
+                pressed,
+              }) => [
+                styles.primaryButton,
+
+                pressed &&
+                  styles.pressed,
+
+                isBusy &&
+                  styles.disabled,
+              ]}
+            >
+              {isLoading ? (
+                <ActivityIndicator
+                  color="#FFFFFF"
+                />
+              ) : (
+                <Text
+                  style={
+                    styles.primaryButtonText
+                  }
+                >
+                  Zaloguj się
+                </Text>
+              )}
+            </Pressable>
+
+            <Pressable
+              disabled={
+                isBusy
+              }
+              onPress={
+                handleRegister
+              }
+              style={({
+                pressed,
+              }) => [
+                styles.registerButton,
+
+                pressed &&
+                  styles.pressed,
+
+                isBusy &&
+                  styles.disabled,
+              ]}
+            >
+              <Text
+                style={
+                  styles.registerButtonText
+                }
+              >
+                Utwórz konto
+              </Text>
+            </Pressable>
           </View>
 
-          <View style={styles.socialRow}>
-            <View
-              style={styles.socialDisabled}
-            >
-              <Text>
-                Google
-              </Text>
-            </View>
-
-            <View
-              style={styles.socialDisabled}
-            >
-              <Text>
-                Facebook
-              </Text>
-            </View>
-          </View>
-        </View>
+          <Text
+            style={
+              styles.footer
+            }
+          >
+            HomeVault
+            zabezpiecza dane
+            każdego użytkownika
+            oddzielnie.
+          </Text>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F7F8FA',
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        '#F7F8FA',
+    },
 
-  keyboard: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
+    keyboardView: {
+      flex: 1,
+    },
 
-  card: {
-    width: '100%',
-    maxWidth: 420,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 28,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
+    content: {
+      flexGrow: 1,
+      justifyContent:
+        'center',
+      paddingHorizontal: 24,
+      paddingVertical: 40,
+    },
 
-  logo: {
-    fontSize: 48,
-    textAlign: 'center',
-  },
+    header: {
+      alignItems: 'center',
+      marginBottom: 30,
+    },
 
-  title: {
-    marginTop: 12,
-    fontSize: 30,
-    fontWeight: '700',
-    textAlign: 'center',
-    color: '#111827',
-  },
+    logoIcon: {
+      fontSize: 50,
+    },
 
-  subtitle: {
-    marginTop: 6,
-    marginBottom: 28,
-    fontSize: 14,
-    textAlign: 'center',
-    color: '#6B7280',
-  },
+    logo: {
+      marginTop: 12,
+      fontSize: 34,
+      fontWeight: '800',
+      color: '#111827',
+    },
 
-  input: {
-    height: 52,
-    marginBottom: 14,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    fontSize: 16,
-  },
+    subtitle: {
+      marginTop: 7,
+      fontSize: 15,
+      color: '#6B7280',
+      textAlign: 'center',
+    },
 
-  primaryButton: {
-    minHeight: 52,
-    borderRadius: 12,
-    backgroundColor: '#111827',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    card: {
+      width: '100%',
+      maxWidth: 460,
+      alignSelf: 'center',
+      backgroundColor:
+        '#FFFFFF',
+      borderWidth: 1,
+      borderColor:
+        '#E5E7EB',
+      borderRadius: 20,
+      padding: 24,
+    },
 
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+    title: {
+      fontSize: 26,
+      fontWeight: '700',
+      color: '#111827',
+    },
 
-  secondaryButton: {
-    minHeight: 52,
-    marginTop: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    description: {
+      marginTop: 8,
+      marginBottom: 22,
+      fontSize: 14,
+      lineHeight: 21,
+      color: '#6B7280',
+    },
 
-  secondaryButtonText: {
-    color: '#111827',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+    googleButton: {
+      minHeight: 52,
+      borderWidth: 1,
+      borderColor:
+        '#D1D5DB',
+      borderRadius: 12,
+      backgroundColor:
+        '#FFFFFF',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent:
+        'center',
+      paddingHorizontal: 16,
+      gap: 12,
+    },
 
-  divider: {
-    marginVertical: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+    googleIcon: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor:
+        '#E5E7EB',
+      alignItems: 'center',
+      justifyContent:
+        'center',
+    },
 
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E5E7EB',
-  },
+    googleIconText: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: '#4285F4',
+    },
 
-  dividerText: {
-    paddingHorizontal: 12,
-    color: '#9CA3AF',
-    fontSize: 12,
-  },
+    googleButtonText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: '#111827',
+    },
 
-  socialRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
+    dividerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginVertical: 22,
+    },
 
-  socialDisabled: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 12,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    opacity: 0.5,
-  },
+    divider: {
+      flex: 1,
+      height: 1,
+      backgroundColor:
+        '#E5E7EB',
+    },
 
-  pressed: {
-    opacity: 0.7,
-  },
+    dividerText: {
+      marginHorizontal: 12,
+      fontSize: 13,
+      color: '#9CA3AF',
+    },
 
-  disabled: {
-    opacity: 0.5,
-  },
-});
+    label: {
+      marginBottom: 7,
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#374151',
+    },
+
+    passwordLabel: {
+      marginTop: 16,
+    },
+
+    input: {
+      minHeight: 50,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor:
+        '#D1D5DB',
+      borderRadius: 11,
+      backgroundColor:
+        '#FFFFFF',
+      fontSize: 16,
+      color: '#111827',
+    },
+
+    primaryButton: {
+      minHeight: 52,
+      marginTop: 24,
+      borderRadius: 12,
+      backgroundColor:
+        '#111827',
+      alignItems: 'center',
+      justifyContent:
+        'center',
+    },
+
+    primaryButtonText: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: '#FFFFFF',
+    },
+
+    registerButton: {
+      minHeight: 48,
+      marginTop: 12,
+      alignItems: 'center',
+      justifyContent:
+        'center',
+    },
+
+    registerButtonText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: '#374151',
+    },
+
+    pressed: {
+      opacity: 0.72,
+    },
+
+    disabled: {
+      opacity: 0.55,
+    },
+
+    footer: {
+      maxWidth: 440,
+      alignSelf: 'center',
+      marginTop: 24,
+      textAlign: 'center',
+      color: '#9CA3AF',
+      fontSize: 12,
+      lineHeight: 18,
+    },
+  });
