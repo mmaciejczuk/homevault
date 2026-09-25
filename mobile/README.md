@@ -1,56 +1,550 @@
-# Welcome to your Expo app 👋
+# HomeVault
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+HomeVault to aplikacja mobilna i webowa do przechowywania cyfrowej dokumentacji domu.
 
-## Get started
+Pozwala organizować informacje według struktury:
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```text
+Dom
+└── Pomieszczenia
+    └── Wpisy
+        └── Zdjęcia / załączniki
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Przykładowe zastosowania
 
-### Other setup steps
+* dokumentacja instalacji elektrycznej,
+* hydraulika,
+* ogrzewanie,
+* ściany i zabudowy,
+* podłogi,
+* urządzenia,
+* zdjęcia instalacji przed zakryciem,
+* notatki techniczne,
+* dokumentacja remontowa i budowlana.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+---
 
-## Learn more
+# Stack
 
-To learn more about developing your project with Expo, look at the following resources:
+## Backend
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+* Node.js
+* NestJS
+* Prisma 7
+* PostgreSQL
+* Supabase
+* Supabase Storage
 
-## Join the community
+## Frontend
 
-Join our community of developers creating universal apps.
+* React Native
+* Expo
+* Expo Router
+* TypeScript
+* Expo Image Picker
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Hosting
+
+* API: Railway
+* Database: Supabase PostgreSQL
+* Storage: Supabase Storage
+* Android builds: Expo EAS
+
+---
+
+# Struktura projektu
+
+```text
+homevault/
+├── api/                # NestJS API
+├── mobile/             # Expo / React Native
+├── package.json        # wspólne komendy developerskie
+├── package-lock.json
+├── .gitignore
+└── README.md
+```
+
+---
+
+# Wymagania
+
+Do uruchomienia projektu potrzebne są:
+
+* Node.js
+* npm
+* Git
+* konto Supabase
+* konto Railway
+* konto Expo / EAS
+
+Sprawdzenie wersji:
+
+```powershell
+node --version
+npm.cmd --version
+git --version
+```
+
+---
+
+# Instalacja
+
+Po sklonowaniu repozytorium:
+
+```powershell
+git clone https://github.com/mmaciejczuk/homevault.git
+cd homevault
+```
+
+Instalacja zależności głównych:
+
+```powershell
+npm.cmd install
+```
+
+Instalacja backendu:
+
+```powershell
+npm.cmd --prefix api install
+```
+
+Instalacja mobile:
+
+```powershell
+npm.cmd --prefix mobile install
+```
+
+---
+
+# Environment variables
+
+## API
+
+Plik:
+
+```text
+api/.env
+```
+
+Przykład:
+
+```env
+DATABASE_URL=postgresql://...
+SUPABASE_URL=https://PROJECT.supabase.co
+SUPABASE_SECRET_KEY=...
+```
+
+Sekrety nie mogą być commitowane do Git.
+
+---
+
+## Mobile
+
+Lokalny plik:
+
+```text
+mobile/.env.local
+```
+
+Przykład dla Railway:
+
+```env
+EXPO_PUBLIC_API_URL=https://homevault-production.up.railway.app
+```
+
+`.env.local` również nie jest przechowywany w repozytorium.
+
+---
+
+# Uruchamianie projektu
+
+## Lokalny development
+
+Z katalogu głównego:
+
+```powershell
+cd C:\Code\homevault
+npm.cmd run dev
+```
+
+Uruchamia jednocześnie:
+
+```text
+API     → http://localhost:3000
+Mobile  → Expo / Metro
+```
+
+Frontend korzysta wtedy z lokalnego API:
+
+```text
+http://localhost:3000
+```
+
+---
+
+## Mobile z produkcyjnym API
+
+```powershell
+cd C:\Code\homevault
+npm.cmd run prod
+```
+
+Mobile korzysta wtedy z:
+
+```text
+https://homevault-production.up.railway.app
+```
+
+bez uruchamiania lokalnego backendu.
+
+---
+
+# Uruchamianie pojedynczych projektów
+
+## API
+
+```powershell
+cd C:\Code\homevault\api
+npm.cmd run dev
+```
+
+API:
+
+```text
+http://localhost:3000
+```
+
+---
+
+## Expo / Mobile
+
+```powershell
+cd C:\Code\homevault\mobile
+npm.cmd run dev
+```
+
+Po uruchomieniu Expo można nacisnąć:
+
+```text
+w
+```
+
+aby otworzyć wersję webową.
+
+Można również użyć:
+
+```powershell
+npm.cmd run web
+```
+
+Android:
+
+```powershell
+npm.cmd run android
+```
+
+---
+
+# API
+
+## Properties
+
+```http
+GET /properties
+POST /properties
+GET /properties/:id
+```
+
+## Rooms
+
+```http
+GET /properties/:propertyId/rooms
+POST /properties/:propertyId/rooms
+GET /rooms/:id
+```
+
+## Entries
+
+```http
+GET /rooms/:roomId/entries
+POST /rooms/:roomId/entries
+GET /entries/:id
+```
+
+## Attachments
+
+```http
+GET /entries/:entryId/attachments
+POST /entries/:entryId/attachments
+DELETE /attachments/:id
+```
+
+Upload zdjęć korzysta z prywatnego bucketu Supabase Storage.
+
+---
+
+# Kategorie wpisów
+
+```text
+ELECTRICAL
+PLUMBING
+HEATING
+WALL
+FLOOR
+DEVICE
+NOTE
+OTHER
+```
+
+---
+
+# Android / APK
+
+Projekt korzysta z Expo EAS Build.
+
+## Logowanie
+
+```powershell
+npx.cmd eas-cli@latest login
+```
+
+Sprawdzenie konta:
+
+```powershell
+npx.cmd eas-cli@latest whoami
+```
+
+---
+
+# Konfiguracja środowiska EAS
+
+Produkcja API dla profilu `preview`:
+
+```powershell
+npx.cmd eas-cli@latest env:set `
+  --name EXPO_PUBLIC_API_URL `
+  --value https://homevault-production.up.railway.app `
+  --environment preview `
+  --visibility plaintext
+```
+
+Sprawdzenie:
+
+```powershell
+npx.cmd eas-cli@latest env:list --environment preview
+```
+
+---
+
+# Build APK
+
+Przejście do projektu mobile:
+
+```powershell
+cd C:\Code\homevault\mobile
+```
+
+Na Windows, przy obecnej strukturze monorepo:
+
+```powershell
+$env:EAS_NO_VCS="1"
+$env:EAS_PROJECT_ROOT="C:\Code\homevault\mobile"
+```
+
+Build:
+
+```powershell
+npx.cmd eas-cli@latest build --platform android --profile preview
+```
+
+Profil `preview` generuje instalowalny plik APK.
+
+Po zakończeniu EAS zwraca link oraz kod QR do instalacji aplikacji na Androidzie.
+
+---
+
+# Build produkcyjny Android
+
+Build przeznaczony docelowo do Google Play:
+
+```powershell
+npx.cmd eas-cli@latest build --platform android --profile production
+```
+
+Wersja produkcyjna generuje artefakt przeznaczony do publikacji w Google Play.
+
+---
+
+# Prisma
+
+## Generowanie klienta
+
+```powershell
+cd C:\Code\homevault\api
+npx.cmd prisma generate
+```
+
+## Migracje lokalne
+
+```powershell
+npx.cmd prisma migrate dev
+```
+
+## Deploy migracji
+
+```powershell
+npx.cmd prisma migrate deploy --config=prisma7.config.ts
+```
+
+---
+
+# Railway
+
+Backend produkcyjny:
+
+```text
+https://homevault-production.up.railway.app
+```
+
+Przykładowy endpoint:
+
+```text
+https://homevault-production.up.railway.app/properties
+```
+
+Railway automatycznie wdraża backend po zmianach na branchu:
+
+```text
+main
+```
+
+---
+
+# Git
+
+Cały projekt jest jednym repozytorium Git.
+
+```text
+homevault/.git
+```
+
+`api` i `mobile` nie posiadają własnych repozytoriów Git.
+
+## Sprawdzenie zmian
+
+```powershell
+cd C:\Code\homevault
+git status
+```
+
+## Dodanie zmian
+
+```powershell
+git add -A
+```
+
+## Commit
+
+```powershell
+git commit -m "Update HomeVault"
+```
+
+## Push
+
+```powershell
+git push
+```
+
+---
+
+# Pliki ignorowane przez Git
+
+Do repozytorium nie powinny trafiać:
+
+```text
+node_modules/
+.env
+.env.local
+dist/
+.expo/
+coverage/
+*.log
+cache/
+```
+
+Sprawdzenie:
+
+```powershell
+git check-ignore node_modules
+git check-ignore api/node_modules
+git check-ignore mobile/node_modules
+git check-ignore mobile/.env.local
+```
+
+---
+
+# Aktualny przepływ aplikacji
+
+```text
+HomeVault Android / Web
+        ↓
+Railway
+        ↓
+NestJS API
+        ↓
+Prisma
+        ↓
+Supabase PostgreSQL
+        ↓
+Supabase Storage
+```
+
+W trybie lokalnym:
+
+```text
+HomeVault Web / Expo
+        ↓
+localhost:3000
+        ↓
+NestJS API
+        ↓
+Prisma
+        ↓
+Supabase PostgreSQL
+        ↓
+Supabase Storage
+```
+
+---
+
+# Status MVP
+
+Aktualna wersja MVP obsługuje:
+
+* dodawanie domów,
+* dodawanie pomieszczeń,
+* dodawanie wpisów,
+* kategorie wpisów,
+* dodawanie zdjęć z galerii,
+* wykonywanie zdjęć aparatem,
+* upload zdjęć do Supabase Storage,
+* wyświetlanie zdjęć,
+* podgląd zdjęć,
+* usuwanie zdjęć,
+* backend wdrożony na Railway,
+* instalowalny build Android APK.
+
+---
+
+# Planowane
+
+* Supabase Auth,
+* konta użytkowników,
+* przypisanie domów do właściciela,
+* dokumenty PDF,
+* wyszukiwanie,
+* analiza zdjęć z wykorzystaniem AI,
+* RAG,
+* funkcja „Zapytaj swój dom”,
+* publikacja w Google Play.
