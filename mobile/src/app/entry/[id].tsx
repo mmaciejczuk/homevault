@@ -24,7 +24,12 @@ import {
   View,
 } from 'react-native';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://homevault-production.up.railway.app';
+import { File } from 'expo-file-system';
+import { fetch as expoFetch } from 'expo/fetch';
+
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL ??
+  'https://homevault-production.up.railway.app';
 
 type EntryCategory =
   | 'ELECTRICAL'
@@ -201,14 +206,20 @@ export default function EntryDetailsScreen() {
       return;
     }
 
-    const formData = new FormData();
-
+    /*
+     * WEB
+     *
+     * ImagePicker zwraca normalny browserowy File,
+     * więc używamy standardowego fetch().
+     */
     if (Platform.OS === 'web') {
       if (!asset.file) {
         throw new Error(
           'Brak obiektu File dla wybranego zdjęcia.',
         );
       }
+
+      const formData = new FormData();
 
       formData.append(
         'file',
@@ -217,27 +228,72 @@ export default function EntryDetailsScreen() {
           asset.file.name ??
           `photo-${Date.now()}.jpg`,
       );
-    } else {
-      formData.append(
-        'file',
+
+      const response = await fetch(
+        `${API_URL}/entries/${id}/attachments`,
         {
-          uri: asset.uri,
-          name:
-            asset.fileName ??
-            `photo-${Date.now()}.jpg`,
-          type:
-            asset.mimeType ??
-            'image/jpeg',
-        } as any,
+          method: 'POST',
+          body: formData,
+        },
       );
+
+      if (!response.ok) {
+        const responseBody =
+          await response.text();
+
+        throw new Error(
+          `Upload zwrócił ${response.status}: ${responseBody}`,
+        );
+      }
+
+      return response.json();
     }
 
-    const response = await fetch(
+    /*
+     * ANDROID / IOS
+     *
+     * Nie przekazujemy do FormData obiektu:
+     *
+     * {
+     *   uri,
+     *   name,
+     *   type
+     * }
+     *
+     * React Native / Expo 57 zgłasza dla niego:
+     *
+     * Unsupported FormDataPart implementation
+     *
+     * Tworzymy prawdziwy File z expo-file-system
+     * i wysyłamy go przez expo/fetch.
+     */
+    const file = new File(asset.uri);
+
+    const formData = new FormData();
+
+    console.log('UPLOAD FILE', {
+      uri: file.uri,
+      name: file.name,
+      type: file.type,
+      size: file.size,
+    });
+
+    formData.append(
+      'file',
+      file,
+    );
+
+    const response = await expoFetch(
       `${API_URL}/entries/${id}/attachments`,
       {
         method: 'POST',
         body: formData,
       },
+    );
+
+    console.log(
+      'UPLOAD RESPONSE:',
+      response.status,
     );
 
     if (!response.ok) {
