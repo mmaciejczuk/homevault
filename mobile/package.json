@@ -2,6 +2,15 @@
   "name": "mobile",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "scripts": {
+    "dev": "expo start --clear",
+    "start": "expo start",
+    "web": "expo start --web --clear",
+    "android": "expo start --android --clear",
+    "ios": "expo start --ios --clear",
+    "lint": "expo lint",
+    "reset-project": "node ./scripts/reset-project.js"
+  },
   "dependencies": {
     "@expo/ui": "~57.0.19",
     "expo": "~57.0.24",
@@ -31,14 +40,6 @@
   "devDependencies": {
     "@types/react": "~19.2.2",
     "typescript": "~6.0.3"
-  },
-  "scripts": {
-    "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
-    "lint": "expo lint"
   },
   "private": true
 }

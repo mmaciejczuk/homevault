@@ -1,0 +1,29 @@
+{
+    "name":  "homevault",
+    "version":  "1.0.0",
+    "description":  "",
+    "main":  "index.js",
+    "scripts":  {
+                    "test":  "echo \"Error: no test specified\" \u0026\u0026 exit 1",
+                    "dev":  "concurrently --names API,MOBILE \"npm.cmd --prefix api run dev\" \"cross-env EXPO_NO_DOTENV=1 EXPO_PUBLIC_API_URL=http://localhost:3000 npm.cmd --prefix mobile run dev\"",
+                    "prod":  "cross-env EXPO_NO_DOTENV=1 EXPO_PUBLIC_API_URL=https://homevault-production.up.railway.app npm.cmd --prefix mobile run dev"
+                },
+    "repository":  {
+                       "type":  "git",
+                       "url":  "git+https://mmaciejczuk@github.com/mmaciejczuk/homevault.git"
+                   },
+    "keywords":  [
+
+                 ],
+    "author":  "",
+    "license":  "ISC",
+    "type":  "commonjs",
+    "bugs":  {
+                 "url":  "https://github.com/mmaciejczuk/homevault/issues"
+             },
+    "homepage":  "https://github.com/mmaciejczuk/homevault#readme",
+    "devDependencies":  {
+                            "concurrently":  "^10.0.5",
+                            "cross-env":  "^10.1.0"
+                        }
+}
