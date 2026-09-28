@@ -21,7 +21,9 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
-import { apiFetch } from '../lib/api';
+import {
+  apiFetch,
+} from '../lib/api';
 
 interface Property {
   id: number;
@@ -31,59 +33,60 @@ interface Property {
 }
 
 export default function HomeScreen() {
-  const [properties, setProperties] =
-    useState<Property[]>([]);
+  const [
+    properties,
+    setProperties,
+  ] = useState<Property[]>([]);
 
-  const [isLoading, setIsLoading] =
-    useState(true);
+  const [
+    isLoading,
+    setIsLoading,
+  ] = useState(true);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [
+    error,
+    setError,
+  ] = useState<string | null>(
+    null,
+  );
 
   const loadProperties =
-    useCallback(async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
+    useCallback(
+      async () => {
+        try {
+          setIsLoading(true);
+          setError(null);
 
-        console.log(
-          'Pobieram nieruchomości...',
-        );
+          const response =
+            await apiFetch(
+              '/properties',
+            );
 
-        const response =
-          await apiFetch('/properties');
+          if (!response.ok) {
+            throw new Error(
+              `API zwróciło status ${response.status}`,
+            );
+          }
 
-        if (!response.ok) {
-          const responseBody =
-            await response.text();
+          const data: Property[] =
+            await response.json();
 
-          throw new Error(
-            `API zwróciło status ${response.status}: ${responseBody}`,
+          setProperties(data);
+        } catch (err) {
+          console.error(
+            'Błąd pobierania nieruchomości:',
+            err,
           );
+
+          setError(
+            'Nie udało się pobrać nieruchomości.',
+          );
+        } finally {
+          setIsLoading(false);
         }
-
-        const data: Property[] =
-          await response.json();
-
-        console.log(
-          'Pobrane nieruchomości:',
-          data,
-        );
-
-        setProperties(data);
-      } catch (err) {
-        console.error(
-          'Błąd pobierania nieruchomości:',
-          err,
-        );
-
-        setError(
-          'Nie udało się pobrać nieruchomości.',
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    }, []);
+      },
+      [],
+    );
 
   useFocusEffect(
     useCallback(() => {
@@ -91,43 +94,131 @@ export default function HomeScreen() {
     }, [loadProperties]),
   );
 
-  const handleAddProperty = () => {
-    router.push('/create-property');
-  };
+  const handleAddProperty =
+    () => {
+      router.push(
+        '/create-property',
+      );
+    };
+
+  const handleAccount =
+    () => {
+      router.push(
+        '/account',
+      );
+    };
+
+  const handlePropertyPress =
+    (propertyId: number) => {
+      router.push({
+        pathname:
+          '/property/[id]',
+
+        params: {
+          id: String(
+            propertyId,
+          ),
+        },
+      });
+    };
 
   return (
     <SafeAreaView
-      style={styles.container}
-      edges={['top']}
+      style={
+        styles.container
+      }
     >
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.logo}>
+      <View
+        style={
+          styles.header
+        }
+      >
+        <View
+          style={
+            styles.headerText
+          }
+        >
+          <Text
+            style={
+              styles.logo
+            }
+          >
             HomeVault
           </Text>
 
-          <Text style={styles.subtitle}>
-            Twoja cyfrowa dokumentacja domu
+          <Text
+            style={
+              styles.subtitle
+            }
+          >
+            Twoja cyfrowa
+            dokumentacja domu
           </Text>
         </View>
+
+        <Pressable
+          onPress={
+            handleAccount
+          }
+          style={({
+            pressed,
+          }) => [
+            styles.accountButton,
+
+            pressed &&
+              styles.buttonPressed,
+          ]}
+        >
+          <Text
+            style={
+              styles.accountIcon
+            }
+          >
+            👤
+          </Text>
+
+          <Text
+            style={
+              styles.accountButtonText
+            }
+          >
+            Konto
+          </Text>
+        </Pressable>
       </View>
 
       <ScrollView
-        style={styles.scrollView}
+        style={
+          styles.scrollView
+        }
         contentContainerStyle={
           styles.content
         }
       >
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>
+        <View
+          style={
+            styles.titleRow
+          }
+        >
+          <Text
+            style={
+              styles.title
+            }
+          >
             Moje domy
           </Text>
 
-          {properties.length > 0 && (
+          {properties.length >
+            0 && (
             <Pressable
-              onPress={handleAddProperty}
-              style={({ pressed }) => [
+              onPress={
+                handleAddProperty
+              }
+              style={({
+                pressed,
+              }) => [
                 styles.smallAddButton,
+
                 pressed &&
                   styles.buttonPressed,
               ]}
@@ -144,96 +235,137 @@ export default function HomeScreen() {
         </View>
 
         {isLoading && (
-          <View style={styles.center}>
+          <View
+            style={
+              styles.center
+            }
+          >
             <ActivityIndicator
               size="large"
             />
 
             <Text
-              style={styles.loadingText}
-            >
-              Pobieranie nieruchomości...
-            </Text>
-          </View>
-        )}
-
-        {!isLoading && error && (
-          <View style={styles.center}>
-            <Text
-              style={styles.errorTitle}
-            >
-              Nie udało się pobrać danych
-            </Text>
-
-            <Text
               style={
-                styles.errorDescription
+                styles.loadingText
               }
             >
-              {error}
+              Pobieranie
+              nieruchomości...
             </Text>
-
-            <Pressable
-              onPress={loadProperties}
-              style={({ pressed }) => [
-                styles.button,
-                pressed &&
-                  styles.buttonPressed,
-              ]}
-            >
-              <Text
-                style={styles.buttonText}
-              >
-                Spróbuj ponownie
-              </Text>
-            </Pressable>
           </View>
         )}
 
         {!isLoading &&
-          !error &&
-          properties.length === 0 && (
+          error && (
             <View
-              style={styles.emptyState}
+              style={
+                styles.center
+              }
             >
               <Text
-                style={styles.houseIcon}
+                style={
+                  styles.errorTitle
+                }
               >
-                🏠
-              </Text>
-
-              <Text
-                style={styles.emptyTitle}
-              >
-                Nie masz jeszcze żadnej
-                nieruchomości
+                Nie udało się
+                pobrać danych
               </Text>
 
               <Text
                 style={
-                  styles.emptyDescription
+                  styles.errorText
                 }
               >
-                Dodaj swój pierwszy dom,
-                aby rozpocząć
-                dokumentowanie instalacji,
-                urządzeń, zdjęć i
-                dokumentów.
+                {error}
               </Text>
 
               <Pressable
                 onPress={
-                  handleAddProperty
+                  loadProperties
                 }
-                style={({ pressed }) => [
-                  styles.button,
+                style={({
+                  pressed,
+                }) => [
+                  styles.retryButton,
+
                   pressed &&
                     styles.buttonPressed,
                 ]}
               >
                 <Text
                   style={
-                    styles.buttonText
+                    styles.retryButtonText
+                  }
+                >
+                  Spróbuj ponownie
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
+        {!isLoading &&
+          !error &&
+          properties.length ===
+            0 && (
+            <View
+              style={
+                styles.emptyState
+              }
+            >
+              <View
+                style={
+                  styles.emptyIconContainer
+                }
+              >
+                <Text
+                  style={
+                    styles.emptyIcon
+                  }
+                >
+                  🏠
+                </Text>
+              </View>
+
+              <Text
+                style={
+                  styles.emptyTitle
+                }
+              >
+                Dodaj swój
+                pierwszy dom
+              </Text>
+
+              <Text
+                style={
+                  styles.emptyText
+                }
+              >
+                Utwórz
+                nieruchomość,
+                aby zacząć
+                przechowywać
+                dokumentację,
+                zdjęcia i
+                informacje o
+                swoim domu.
+              </Text>
+
+              <Pressable
+                onPress={
+                  handleAddProperty
+                }
+                style={({
+                  pressed,
+                }) => [
+                  styles.addButton,
+
+                  pressed &&
+                    styles.buttonPressed,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.addButtonText
                   }
                 >
                   + Dodaj dom
@@ -244,32 +376,34 @@ export default function HomeScreen() {
 
         {!isLoading &&
           !error &&
-          properties.length > 0 && (
+          properties.length >
+            0 && (
             <View
               style={
                 styles.propertiesList
               }
             >
               {properties.map(
-                (property) => (
+                (
+                  property,
+                ) => (
                   <Pressable
-                    key={property.id}
+                    key={
+                      property.id
+                    }
+                    onPress={() =>
+                      handlePropertyPress(
+                        property.id,
+                      )
+                    }
                     style={({
                       pressed,
                     }) => [
                       styles.propertyCard,
+
                       pressed &&
                         styles.propertyCardPressed,
                     ]}
-                    onPress={() => {
-                      router.push({
-                        pathname:
-                          '/property/[id]',
-                        params: {
-                          id: property.id.toString(),
-                        },
-                      });
-                    }}
                   >
                     <View
                       style={
@@ -295,23 +429,24 @@ export default function HomeScreen() {
                           styles.propertyName
                         }
                       >
-                        {property.name}
+                        {
+                          property.name
+                        }
                       </Text>
 
-                      {property.address && (
+                      {property.address ? (
                         <Text
                           style={
                             styles.propertyDetail
                           }
                         >
-                          📍{' '}
                           {
                             property.address
                           }
                         </Text>
-                      )}
+                      ) : null}
 
-                      {property.yearBuilt && (
+                      {property.yearBuilt ? (
                         <Text
                           style={
                             styles.propertyDetail
@@ -322,11 +457,13 @@ export default function HomeScreen() {
                             property.yearBuilt
                           }
                         </Text>
-                      )}
+                      ) : null}
                     </View>
 
                     <Text
-                      style={styles.arrow}
+                      style={
+                        styles.arrow
+                      }
                     >
                       ›
                     </Text>
@@ -340,193 +477,267 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F7F8FA',
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        '#F7F8FA',
+    },
 
-  header: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 20,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
+    header: {
+      paddingHorizontal: 24,
+      paddingTop: 14,
+      paddingBottom: 18,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent:
+        'space-between',
+      borderBottomWidth: 1,
+      borderBottomColor:
+        '#E5E7EB',
+      backgroundColor:
+        '#FFFFFF',
+    },
 
-  logo: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-  },
+    headerText: {
+      flex: 1,
+      marginRight: 16,
+    },
 
-  subtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    color: '#6B7280',
-  },
+    logo: {
+      fontSize: 26,
+      fontWeight: '800',
+      color: '#111827',
+    },
 
-  scrollView: {
-    flex: 1,
-  },
+    subtitle: {
+      marginTop: 3,
+      fontSize: 13,
+      color: '#6B7280',
+    },
 
-  content: {
-    flexGrow: 1,
-    padding: 24,
-  },
+    accountButton: {
+      minHeight: 42,
+      paddingHorizontal: 13,
+      borderRadius: 11,
+      borderWidth: 1,
+      borderColor:
+        '#D1D5DB',
+      backgroundColor:
+        '#FFFFFF',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent:
+        'center',
+    },
 
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    accountIcon: {
+      fontSize: 16,
+      marginRight: 7,
+    },
 
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#111827',
-  },
+    accountButtonText: {
+      color: '#374151',
+      fontSize: 14,
+      fontWeight: '600',
+    },
 
-  center: {
-    flex: 1,
-    minHeight: 400,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    scrollView: {
+      flex: 1,
+    },
 
-  loadingText: {
-    marginTop: 14,
-    fontSize: 14,
-    color: '#6B7280',
-  },
+    content: {
+      padding: 24,
+      paddingBottom: 60,
+    },
 
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#111827',
-  },
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent:
+        'space-between',
+    },
 
-  errorDescription: {
-    marginTop: 8,
-    fontSize: 15,
-    color: '#6B7280',
-  },
+    title: {
+      fontSize: 28,
+      fontWeight: '700',
+      color: '#111827',
+    },
 
-  emptyState: {
-    flex: 1,
-    minHeight: 500,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 80,
-  },
+    center: {
+      marginTop: 80,
+      alignItems: 'center',
+      justifyContent:
+        'center',
+      paddingHorizontal: 20,
+    },
 
-  houseIcon: {
-    fontSize: 64,
-    marginBottom: 20,
-  },
+    loadingText: {
+      marginTop: 14,
+      color: '#6B7280',
+    },
 
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#111827',
-    textAlign: 'center',
-  },
+    errorTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: '#111827',
+      textAlign: 'center',
+    },
 
-  emptyDescription: {
-    marginTop: 10,
-    maxWidth: 340,
-    fontSize: 15,
-    lineHeight: 22,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
+    errorText: {
+      marginTop: 8,
+      color: '#6B7280',
+      textAlign: 'center',
+    },
 
-  button: {
-    marginTop: 28,
-    backgroundColor: '#111827',
-    paddingHorizontal: 28,
-    paddingVertical: 15,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    retryButton: {
+      marginTop: 22,
+      paddingHorizontal: 20,
+      paddingVertical: 13,
+      backgroundColor:
+        '#111827',
+      borderRadius: 12,
+    },
 
-  buttonPressed: {
-    opacity: 0.75,
-  },
+    retryButtonText: {
+      color: '#FFFFFF',
+      fontWeight: '600',
+    },
 
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+    emptyState: {
+      marginTop: 70,
+      alignItems: 'center',
+      paddingHorizontal: 20,
+    },
 
-  smallAddButton: {
-    backgroundColor: '#111827',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
+    emptyIconContainer: {
+      width: 86,
+      height: 86,
+      borderRadius: 24,
+      backgroundColor:
+        '#FFFFFF',
+      borderWidth: 1,
+      borderColor:
+        '#E5E7EB',
+      alignItems: 'center',
+      justifyContent:
+        'center',
+    },
 
-  smallAddButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+    emptyIcon: {
+      fontSize: 42,
+    },
 
-  propertiesList: {
-    marginTop: 24,
-    gap: 14,
-  },
+    emptyTitle: {
+      marginTop: 22,
+      fontSize: 22,
+      fontWeight: '700',
+      color: '#111827',
+      textAlign: 'center',
+    },
 
-  propertyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
+    emptyText: {
+      maxWidth: 420,
+      marginTop: 10,
+      fontSize: 15,
+      lineHeight: 22,
+      color: '#6B7280',
+      textAlign: 'center',
+    },
 
-  propertyCardPressed: {
-    opacity: 0.75,
-  },
+    addButton: {
+      minHeight: 50,
+      marginTop: 26,
+      paddingHorizontal: 24,
+      borderRadius: 12,
+      backgroundColor:
+        '#111827',
+      alignItems: 'center',
+      justifyContent:
+        'center',
+    },
 
-  propertyIconContainer: {
-    width: 54,
-    height: 54,
-    borderRadius: 14,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    addButtonText: {
+      color: '#FFFFFF',
+      fontSize: 15,
+      fontWeight: '600',
+    },
 
-  propertyIcon: {
-    fontSize: 28,
-  },
+    smallAddButton: {
+      backgroundColor:
+        '#111827',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 10,
+    },
 
-  propertyInfo: {
-    flex: 1,
-    marginLeft: 16,
-  },
+    smallAddButtonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '600',
+    },
 
-  propertyName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-  },
+    propertiesList: {
+      marginTop: 24,
+      gap: 14,
+    },
 
-  propertyDetail: {
-    marginTop: 5,
-    fontSize: 14,
-    color: '#6B7280',
-  },
+    propertyCard: {
+      backgroundColor:
+        '#FFFFFF',
+      borderRadius: 16,
+      padding: 18,
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor:
+        '#E5E7EB',
+    },
 
-  arrow: {
-    marginLeft: 12,
-    fontSize: 32,
-    color: '#9CA3AF',
-  },
-});
+    propertyCardPressed: {
+      opacity: 0.75,
+    },
+
+    propertyIconContainer: {
+      width: 54,
+      height: 54,
+      borderRadius: 14,
+      backgroundColor:
+        '#F3F4F6',
+      justifyContent:
+        'center',
+      alignItems: 'center',
+    },
+
+    propertyIcon: {
+      fontSize: 28,
+    },
+
+    propertyInfo: {
+      flex: 1,
+      marginLeft: 16,
+    },
+
+    propertyName: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: '#111827',
+    },
+
+    propertyDetail: {
+      marginTop: 5,
+      fontSize: 14,
+      color: '#6B7280',
+    },
+
+    arrow: {
+      marginLeft: 12,
+      fontSize: 32,
+      color: '#9CA3AF',
+    },
+
+    buttonPressed: {
+      opacity: 0.7,
+    },
+  });

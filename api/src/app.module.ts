@@ -8,6 +8,7 @@ import { RoomsModule } from './rooms/rooms.module';
 import { EntriesModule } from './entries/entries.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { AuthModule } from './auth/auth.module';
+import { AccountModule } from './account/account.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AuthModule } from './auth/auth.module';
     EntriesModule,
     AttachmentsModule,
     AuthModule,
+    AccountModule,
   ],
 
   controllers: [

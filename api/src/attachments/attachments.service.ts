@@ -4,17 +4,30 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import { randomUUID } from 'node:crypto';
-import { extname } from 'node:path';
+import {
+  randomUUID,
+} from 'node:crypto';
 
-import { PrismaService } from '../prisma/prisma.service';
-import { StorageService } from '../storage/storage.service';
+import {
+  extname,
+} from 'node:path';
+
+import {
+  PrismaService,
+} from '../prisma/prisma.service';
+
+import {
+  StorageService,
+} from '../storage/storage.service';
 
 @Injectable()
 export class AttachmentsService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly storage: StorageService,
+    private readonly prisma:
+      PrismaService,
+
+    private readonly storage:
+      StorageService,
   ) {}
 
   async findByEntry(
@@ -22,21 +35,22 @@ export class AttachmentsService {
     ownerId: string,
   ) {
     const entry =
-      await this.prisma.entry.findFirst({
-        where: {
-          id: entryId,
+      await this.prisma.entry
+        .findFirst({
+          where: {
+            id: entryId,
 
-          room: {
-            property: {
-              ownerId,
+            room: {
+              property: {
+                ownerId,
+              },
             },
           },
-        },
 
-        select: {
-          id: true,
-        },
-      });
+          select: {
+            id: true,
+          },
+        });
 
     if (!entry) {
       throw new NotFoundException(
@@ -45,23 +59,29 @@ export class AttachmentsService {
     }
 
     const attachments =
-      await this.prisma.attachment.findMany({
-        where: {
-          entryId,
-        },
+      await this.prisma
+        .attachment
+        .findMany({
+          where: {
+            entryId,
+          },
 
-        orderBy: {
-          createdAt: 'desc',
-        },
-      });
+          orderBy: {
+            createdAt:
+              'desc',
+          },
+        });
 
     return Promise.all(
       attachments.map(
-        async (attachment) => {
+        async (
+          attachment,
+        ) => {
           const url =
-            await this.storage.createSignedUrl(
-              attachment.storagePath,
-            );
+            await this.storage
+              .createSignedUrl(
+                attachment.storagePath,
+              );
 
           return {
             ...attachment,
@@ -78,21 +98,22 @@ export class AttachmentsService {
     ownerId: string,
   ) {
     const entry =
-      await this.prisma.entry.findFirst({
-        where: {
-          id: entryId,
+      await this.prisma.entry
+        .findFirst({
+          where: {
+            id: entryId,
 
-          room: {
-            property: {
-              ownerId,
+            room: {
+              property: {
+                ownerId,
+              },
             },
           },
-        },
 
-        select: {
-          id: true,
-        },
-      });
+          select: {
+            id: true,
+          },
+        });
 
     if (!entry) {
       throw new NotFoundException(
@@ -129,48 +150,108 @@ export class AttachmentsService {
       `entries/${entryId}/` +
       `${randomUUID()}${extension}`;
 
-    await this.storage.upload(
-      storagePath,
-      file.buffer,
-      file.mimetype,
-    );
+    let attachment:
+      | {
+          id: number;
+          fileName: string;
+          storagePath: string;
+          mimeType: string;
+          size: number;
+          kind:
+            | 'IMAGE'
+            | 'DOCUMENT';
+          entryId: number;
+          createdAt: Date;
+        }
+      | undefined;
 
     try {
-      const attachment =
-        await this.prisma.attachment.create({
-          data: {
-            fileName:
-              file.originalname,
+      await this.storage.upload(
+        storagePath,
+        file.buffer,
+        file.mimetype,
+      );
 
-            storagePath,
+      attachment =
+        await this.prisma
+          .attachment
+          .create({
+            data: {
+              fileName:
+                file.originalname,
 
-            mimeType:
-              file.mimetype,
+              storagePath,
 
-            size:
-              file.size,
+              mimeType:
+                file.mimetype,
 
-            kind:
-              'IMAGE',
+              size:
+                file.size,
 
-            entryId,
-          },
-        });
+              kind:
+                'IMAGE',
+
+              entryId,
+            },
+          });
 
       const url =
-        await this.storage.createSignedUrl(
-          attachment.storagePath,
-        );
+        await this.storage
+          .createSignedUrl(
+            attachment.storagePath,
+          );
 
       return {
         ...attachment,
         url,
       };
     } catch (error) {
+      /*
+       * Jeśli rekord DB zdążył
+       * powstać, usuwamy go.
+       */
+      if (attachment) {
+        await this.prisma
+          .attachment
+          .delete({
+            where: {
+              id:
+                attachment.id,
+            },
+          })
+          .catch(
+            (
+              cleanupError,
+            ) => {
+              console.error(
+                'Attachment DB rollback failed:',
+                cleanupError,
+              );
+            },
+          );
+      }
+
+      /*
+       * Usuwamy storagePath również
+       * po błędzie samego uploadu.
+       *
+       * Przy 504 istnieje możliwość,
+       * że serwer zapisał plik,
+       * ale odpowiedź nie dotarła.
+       */
       await this.storage
-        .remove(storagePath)
+        .remove(
+          storagePath,
+        )
         .catch(
-          () => undefined,
+          (
+            cleanupError,
+          ) => {
+            console.error(
+              'Storage rollback failed:',
+              cleanupError,
+            );
+          },
         );
 
       throw error;
@@ -182,19 +263,21 @@ export class AttachmentsService {
     ownerId: string,
   ) {
     const attachment =
-      await this.prisma.attachment.findFirst({
-        where: {
-          id,
+      await this.prisma
+        .attachment
+        .findFirst({
+          where: {
+            id,
 
-          entry: {
-            room: {
-              property: {
-                ownerId,
+            entry: {
+              room: {
+                property: {
+                  ownerId,
+                },
               },
             },
           },
-        },
-      });
+        });
 
     if (!attachment) {
       throw new NotFoundException(
@@ -206,15 +289,19 @@ export class AttachmentsService {
       attachment.storagePath,
     );
 
-    await this.prisma.attachment.delete({
-      where: {
-        id: attachment.id,
-      },
-    });
+    await this.prisma
+      .attachment
+      .delete({
+        where: {
+          id:
+            attachment.id,
+        },
+      });
 
     return {
       success: true,
-      id: attachment.id,
+      id:
+        attachment.id,
     };
   }
 }
