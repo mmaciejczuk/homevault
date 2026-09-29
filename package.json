@@ -1,29 +1,119 @@
 {
-    "name":  "homevault",
-    "version":  "1.0.0",
-    "description":  "",
-    "main":  "index.js",
-    "scripts":  {
-                    "test":  "echo \"Error: no test specified\" \u0026\u0026 exit 1",
-                    "dev":  "concurrently --names API,MOBILE \"npm.cmd --prefix api run dev\" \"cross-env EXPO_NO_DOTENV=1 EXPO_PUBLIC_API_URL=http://localhost:3000 npm.cmd --prefix mobile run dev\"",
-                    "prod":  "cross-env EXPO_NO_DOTENV=1 EXPO_PUBLIC_API_URL=https://homevault-production.up.railway.app npm.cmd --prefix mobile run dev"
-                },
-    "repository":  {
-                       "type":  "git",
-                       "url":  "git+https://mmaciejczuk@github.com/mmaciejczuk/homevault.git"
-                   },
-    "keywords":  [
+  "name": "homevault",
+  "version": "1.0.0",
+  "description": "HomeVault - cyfrowa dokumentacja domu",
+  "main": "index.js",
+  "scripts": {
+    "help": "node -e \"const p=require('./package.json'); console.table(p._scriptsHelp)\"",
 
-                 ],
-    "author":  "",
-    "license":  "ISC",
-    "type":  "commonjs",
-    "bugs":  {
-                 "url":  "https://github.com/mmaciejczuk/homevault/issues"
-             },
-    "homepage":  "https://github.com/mmaciejczuk/homevault#readme",
-    "devDependencies":  {
-                            "concurrently":  "^10.0.5",
-                            "cross-env":  "^10.1.0"
-                        }
+    "dev": "concurrently --names API,MOBILE \"npm.cmd run api:dev\" \"npm.cmd run mobile:dev\"",
+    "dev:web": "concurrently --names API,WEB \"npm.cmd run api:dev\" \"npm.cmd run mobile:web\"",
+    "dev:web:clear": "concurrently --names API,WEB \"npm.cmd run api:dev\" \"npm.cmd run mobile:web:clear\"",
+
+    "api:dev": "npm.cmd --prefix api run start:dev",
+    "api:start": "npm.cmd --prefix api run start",
+    "api:prod": "npm.cmd --prefix api run start:prod",
+    "api:build": "npm.cmd --prefix api run build",
+
+    "mobile:dev": "cross-env EXPO_PUBLIC_API_URL=http://localhost:3000 npm.cmd --prefix mobile run dev",
+    "mobile:web": "cd mobile && cross-env EXPO_PUBLIC_API_URL=http://localhost:3000 npx.cmd expo start --web",
+    "mobile:web:clear": "cd mobile && cross-env EXPO_PUBLIC_API_URL=http://localhost:3000 npx.cmd expo start --clear --web",
+    "mobile:expo": "cd mobile && npx.cmd expo start",
+    "mobile:expo:clear": "cd mobile && npx.cmd expo start --clear",
+    "mobile:android": "cd mobile && npx.cmd expo start --android",
+    "mobile:android:clear": "cd mobile && npx.cmd expo start --clear --android",
+
+    "mobile:prod": "cross-env EXPO_NO_DOTENV=1 EXPO_PUBLIC_API_URL=https://homevault-production.up.railway.app npm.cmd --prefix mobile run dev",
+    "mobile:web:prod": "cd mobile && cross-env EXPO_NO_DOTENV=1 EXPO_PUBLIC_API_URL=https://homevault-production.up.railway.app npx.cmd expo start --clear --web",
+
+    "typecheck": "cd mobile && npx.cmd tsc --noEmit",
+    "check": "npm.cmd run api:build && npm.cmd run typecheck",
+
+    "prisma:generate": "cd api && npx.cmd prisma generate --config=prisma7.config.ts",
+    "prisma:migrate": "cd api && npx.cmd prisma migrate deploy --config=prisma7.config.ts",
+    "prisma:studio": "cd api && npx.cmd prisma studio --config=prisma7.config.ts",
+
+    "install:all": "npm.cmd install && npm.cmd --prefix api install && npm.cmd --prefix mobile install",
+    "install:ci": "npm.cmd ci && npm.cmd --prefix api ci && npm.cmd --prefix mobile ci",
+
+    "expo:check": "cd mobile && npx.cmd expo install --check",
+    "expo:clear": "cd mobile && node -e \"require('fs').rmSync('.expo',{recursive:true,force:true})\"",
+
+    "eas:preview": "cd mobile && cross-env EAS_NO_VCS=1 EAS_PROJECT_ROOT=C:\\Code\\homevault\\mobile npx.cmd eas-cli@latest build --platform android --profile preview",
+    "eas:env:preview": "cd mobile && npx.cmd eas-cli@latest env:list --environment preview",
+
+    "test:account-delete": "cd api && node --env-file=.env ./scripts/test-account-delete.mjs",
+    "test:account-delete:data": "cd api && node --env-file=.env ./scripts/test-account-delete-with-data.mjs",
+    "test:account-isolation": "cd api && node --env-file=.env ./scripts/test-account-isolation-delete.mjs",
+
+    "git:status": "git status --short"
+  },
+  "_scriptsHelp": {
+    "npm run help": "Pokazuje listę komend i ich opisów.",
+
+    "npm run dev": "Uruchamia jednocześnie lokalne API i Expo Mobile.",
+    "npm run dev:web": "Uruchamia lokalne API oraz aplikację Web.",
+    "npm run dev:web:clear": "Uruchamia API + Web i czyści cache Metro. Najlepsza komenda przy problemach z bundlerem.",
+
+    "npm run api:dev": "Uruchamia NestJS w trybie developerskim z watch.",
+    "npm run api:start": "Uruchamia NestJS standardowo.",
+    "npm run api:prod": "Uruchamia zbudowany backend w trybie produkcyjnym.",
+    "npm run api:build": "Buduje backend NestJS.",
+
+    "npm run mobile:dev": "Uruchamia Expo z lokalnym API http://localhost:3000.",
+    "npm run mobile:web": "Uruchamia tylko Expo Web z lokalnym API.",
+    "npm run mobile:web:clear": "Uruchamia Expo Web z wyczyszczonym cache Metro.",
+    "npm run mobile:expo": "Uruchamia standardowy ekran Expo z QR code.",
+    "npm run mobile:expo:clear": "Uruchamia Expo z wyczyszczonym cache.",
+    "npm run mobile:android": "Uruchamia Expo i próbuje otworzyć Androida.",
+    "npm run mobile:android:clear": "Jak wyżej, ale z wyczyszczonym cache.",
+
+    "npm run mobile:prod": "Uruchamia mobile wskazując na produkcyjne API Railway.",
+    "npm run mobile:web:prod": "Uruchamia Web przeciwko produkcyjnemu API Railway.",
+
+    "npm run typecheck": "Sprawdza TypeScript aplikacji mobilnej bez generowania plików.",
+    "npm run check": "Buduje backend i sprawdza TypeScript frontendu.",
+
+    "npm run prisma:generate": "Generuje Prisma Client.",
+    "npm run prisma:migrate": "Uruchamia oczekujące migracje Prisma.",
+    "npm run prisma:studio": "Uruchamia Prisma Studio.",
+
+    "npm run install:all": "Instaluje zależności root, api i mobile.",
+    "npm run install:ci": "Czysta instalacja z lockfile dla root, api i mobile.",
+
+    "npm run expo:check": "Sprawdza zgodność wersji pakietów Expo.",
+    "npm run expo:clear": "Usuwa katalog mobile/.expo.",
+
+    "npm run eas:preview": "Buduje testowy APK Android przez EAS profile preview.",
+    "npm run eas:env:preview": "Pokazuje zmienne EAS dla środowiska preview.",
+
+    "npm run test:account-delete": "Testuje podstawowe DELETE /account.",
+    "npm run test:account-delete:data": "Testuje usunięcie konta wraz z Property, Room, Entry, Attachment i Storage.",
+    "npm run test:account-isolation": "Testuje izolację danych użytkownika A od użytkownika B.",
+
+    "npm run git:status": "Pokazuje skrócony git status."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mmaciejczuk/homevault.git"
+  },
+  "keywords": [
+    "homevault",
+    "expo",
+    "react-native",
+    "nestjs",
+    "supabase",
+    "prisma"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/mmaciejczuk/homevault/issues"
+  },
+  "homepage": "https://github.com/mmaciejczuk/homevault#readme",
+  "devDependencies": {
+    "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0"
+  }
 }

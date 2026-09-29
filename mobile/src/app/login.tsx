@@ -20,6 +20,10 @@ import {
 } from 'react-native-safe-area-context';
 
 import {
+  router,
+} from 'expo-router';
+
+import {
   signInWithGoogle,
 } from '../lib/googleAuth';
 
@@ -31,26 +35,22 @@ export default function LoginScreen() {
   const [
     email,
     setEmail,
-  ] =
-    useState('');
+  ] = useState('');
 
   const [
     password,
     setPassword,
-  ] =
-    useState('');
+  ] = useState('');
 
   const [
     isLoading,
     setIsLoading,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     isGoogleLoading,
     setIsGoogleLoading,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const showMessage = (
     title: string,
@@ -420,9 +420,7 @@ export default function LoginScreen() {
               }
               placeholder="twoj@email.pl"
               autoCapitalize="none"
-              autoCorrect={
-                false
-              }
+              autoCorrect={false}
               keyboardType="email-address"
               textContentType="emailAddress"
               autoComplete="email"
@@ -461,6 +459,36 @@ export default function LoginScreen() {
                 styles.input
               }
             />
+
+            <Pressable
+              disabled={
+                isBusy
+              }
+              onPress={() =>
+                router.push(
+                  '/forgot-password',
+                )
+              }
+              style={({
+                pressed,
+              }) => [
+                styles.forgotPasswordButton,
+
+                pressed &&
+                  styles.pressed,
+
+                isBusy &&
+                  styles.disabled,
+              ]}
+            >
+              <Text
+                style={
+                  styles.forgotPasswordText
+                }
+              >
+                Nie pamiętasz hasła?
+              </Text>
+            </Pressable>
 
             <Pressable
               disabled={
@@ -694,9 +722,21 @@ const styles =
       color: '#111827',
     },
 
+    forgotPasswordButton: {
+      alignSelf: 'flex-end',
+      marginTop: 10,
+      paddingVertical: 4,
+    },
+
+    forgotPasswordText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#374151',
+    },
+
     primaryButton: {
       minHeight: 52,
-      marginTop: 24,
+      marginTop: 20,
       borderRadius: 12,
       backgroundColor:
         '#111827',
