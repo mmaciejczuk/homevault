@@ -38,6 +38,7 @@ export class StorageService {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
+          detectSessionInUrl: false,
         },
       },
     );
@@ -299,6 +300,79 @@ export class StorageService {
         300 *
           2 ** (attempt - 1),
       );
+    }
+  }
+
+  async removeMany(
+    paths: string[],
+  ) {
+    if (
+      paths.length === 0
+    ) {
+      return;
+    }
+
+    const batchSize =
+      1000;
+
+    for (
+      let index = 0;
+      index < paths.length;
+      index += batchSize
+    ) {
+      const batch =
+        paths.slice(
+          index,
+          index +
+            batchSize,
+        );
+
+      const maxAttempts =
+        3;
+
+      for (
+        let attempt = 1;
+        attempt <=
+          maxAttempts;
+        attempt += 1
+      ) {
+        const {
+          error,
+        } =
+          await this.supabase
+            .storage
+            .from(
+              this.bucket,
+            )
+            .remove(
+              batch,
+            );
+
+        if (!error) {
+          break;
+        }
+
+        console.error(
+          `Supabase batch remove error, attempt ${attempt}/${maxAttempts}:`,
+          error,
+        );
+
+        if (
+          !this.isRetryable(
+            error,
+          ) ||
+          attempt ===
+            maxAttempts
+        ) {
+          throw error;
+        }
+
+        await this.wait(
+          300 *
+            2 **
+              (attempt - 1),
+        );
+      }
     }
   }
 }

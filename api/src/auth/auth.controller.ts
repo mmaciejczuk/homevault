@@ -1,11 +1,20 @@
 import {
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Req,
   UseGuards,
 } from '@nestjs/common';
 
-import { SupabaseAuthGuard } from './auth.guard';
+import {
+  AuthService,
+} from './auth.service';
+
+import {
+  SupabaseAuthGuard,
+} from './auth.guard';
 
 import type {
   AuthenticatedRequest,
@@ -13,15 +22,44 @@ import type {
 
 @Controller('auth')
 export class AuthController {
+  constructor(
+    private readonly authService:
+      AuthService,
+  ) {}
+
   @Get('me')
-  @UseGuards(SupabaseAuthGuard)
+  @UseGuards(
+    SupabaseAuthGuard,
+  )
   getMe(
     @Req()
-    request: AuthenticatedRequest,
+    request:
+      AuthenticatedRequest,
   ) {
     return {
-      id: request.user.id,
-      email: request.user.email,
+      id:
+        request.user.id,
+
+      email:
+        request.user.email,
     };
+  }
+
+  @Delete('account')
+  @UseGuards(
+    SupabaseAuthGuard,
+  )
+  @HttpCode(
+    HttpStatus.NO_CONTENT,
+  )
+  async deleteAccount(
+    @Req()
+    request:
+      AuthenticatedRequest,
+  ) {
+    await this.authService
+      .deleteAccount(
+        request.user.id,
+      );
   }
 }

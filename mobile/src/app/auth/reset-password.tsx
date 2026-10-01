@@ -1,11 +1,10 @@
-import {
-  router,
-} from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 import * as Linking from 'expo-linking';
 
 import {
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -30,55 +29,59 @@ import {
   supabase,
 } from '../../lib/supabase';
 
-interface RecoveryParams {
+type RouteValue =
+  | string
+  | string[]
+  | undefined;
+
+interface RecoveryData {
   code?: string;
   accessToken?: string;
   refreshToken?: string;
-  errorDescription?: string;
+  tokenHash?: string;
+  type?: string;
+  error?: string;
 }
 
-function parseRecoveryUrl(
-  url: string,
-): RecoveryParams {
-  const parts: string[] = [];
-
-  const questionIndex =
-    url.indexOf('?');
-
-  const hashIndex =
-    url.indexOf('#');
-
-  if (questionIndex >= 0) {
-    const end =
-      hashIndex > questionIndex
-        ? hashIndex
-        : url.length;
-
-    parts.push(
-      url.slice(
-        questionIndex + 1,
-        end,
-      ),
-    );
+function firstValue(
+  value: RouteValue,
+): string | undefined {
+  if (Array.isArray(value)) {
+    return value[0];
   }
 
-  if (hashIndex >= 0) {
-    parts.push(
-      url.slice(
-        hashIndex + 1,
-      ),
-    );
+  return value;
+}
+
+function safeDecode(
+  value: string,
+): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
   }
+}
+
+function parseParameters(
+  raw: string,
+): RecoveryData {
+  const cleaned =
+    raw.replace(
+      /^[?#]/,
+      '',
+    );
 
   const params =
     new URLSearchParams(
-      parts.join('&'),
+      cleaned,
     );
 
   return {
     code:
-      params.get('code') ??
-      undefined,
+      params.get(
+        'code',
+      ) ?? undefined,
 
     accessToken:
       params.get(
@@ -90,14 +93,135 @@ function parseRecoveryUrl(
         'refresh_token',
       ) ?? undefined,
 
-    errorDescription:
+    tokenHash:
+      params.get(
+        'token_hash',
+      ) ?? undefined,
+
+    type:
+      params.get(
+        'type',
+      ) ?? undefined,
+
+    error:
       params.get(
         'error_description',
-      ) ?? undefined,
+      ) ??
+      params.get(
+        'error',
+      ) ??
+      params.get(
+        'error_code',
+      ) ??
+      undefined,
   };
 }
 
+function mergeRecoveryData(
+  target: RecoveryData,
+  source: RecoveryData,
+): RecoveryData {
+  return {
+    code:
+      target.code ??
+      source.code,
+
+    accessToken:
+      target.accessToken ??
+      source.accessToken,
+
+    refreshToken:
+      target.refreshToken ??
+      source.refreshToken,
+
+    tokenHash:
+      target.tokenHash ??
+      source.tokenHash,
+
+    type:
+      target.type ??
+      source.type,
+
+    error:
+      target.error ??
+      source.error,
+  };
+}
+
+function parseRecoveryUrl(
+  url: string,
+): RecoveryData {
+  let result: RecoveryData = {};
+
+  const questionIndex =
+    url.indexOf('?');
+
+  const hashIndex =
+    url.indexOf('#');
+
+  if (questionIndex >= 0) {
+    const queryEnd =
+      hashIndex > questionIndex
+        ? hashIndex
+        : url.length;
+
+    result =
+      mergeRecoveryData(
+        result,
+        parseParameters(
+          url.slice(
+            questionIndex + 1,
+            queryEnd,
+          ),
+        ),
+      );
+  }
+
+  if (hashIndex >= 0) {
+    result =
+      mergeRecoveryData(
+        result,
+        parseParameters(
+          url.slice(
+            hashIndex + 1,
+          ),
+        ),
+      );
+  }
+
+  return result;
+}
+
+function containsRecoveryData(
+  data: RecoveryData,
+) {
+  return Boolean(
+    data.code ||
+      data.tokenHash ||
+      (
+        data.accessToken &&
+        data.refreshToken
+      ) ||
+      data.error,
+  );
+}
+
 export default function ResetPasswordScreen() {
+  const linkingUrl =
+    Linking.useLinkingURL();
+
+  const routeParams =
+    useLocalSearchParams<{
+      code?: string | string[];
+      access_token?: string | string[];
+      refresh_token?: string | string[];
+      token_hash?: string | string[];
+      type?: string | string[];
+      error?: string | string[];
+      error_description?: string | string[];
+      error_code?: string | string[];
+    }>();
+
   const [
     password,
     setPassword,
@@ -126,15 +250,469 @@ export default function ResetPasswordScreen() {
   const [
     errorMessage,
     setErrorMessage,
-  ] = useState<string | null>(
-    null,
-  );
+  ] =
+    useState<string | null>(
+      null,
+    );
 
-  const showMessage = (
+  const recoveryUserIdRef =
+    useRef<string | null>(
+      null,
+    );
+
+  const processingRef =
+    useRef(false);
+
+  const processedValueRef =
+    useRef<string | null>(
+      null,
+    );
+
+  useEffect(() => {
+    let mounted = true;
+
+    const markRecoveryReady =
+      async () => {
+        const {
+          data: {
+            user,
+          },
+          error,
+        } =
+          await supabase.auth
+            .getUser();
+
+        if (error) {
+          throw error;
+        }
+
+        if (!user) {
+          throw new Error(
+            'Nie udało się ustalić użytkownika dla linku resetującego hasło.',
+          );
+        }
+
+        recoveryUserIdRef.current =
+          user.id;
+
+        if (!mounted) {
+          return;
+        }
+
+        setRecoveryReady(
+          true,
+        );
+
+        setErrorMessage(
+          null,
+        );
+
+        setIsPreparing(
+          false,
+        );
+      };
+
+    const processRecoveryData =
+      async (
+        data: RecoveryData,
+      ) => {
+        if (
+          processingRef.current
+        ) {
+          return;
+        }
+
+        processingRef.current =
+          true;
+
+        try {
+          if (mounted) {
+            setIsPreparing(
+              true,
+            );
+
+            setRecoveryReady(
+              false,
+            );
+
+            setErrorMessage(
+              null,
+            );
+          }
+
+          /*
+           * Supabase może zwrócić błąd
+           * w query albo hash fragment.
+           */
+          if (data.error) {
+            throw new Error(
+              safeDecode(
+                data.error,
+              ),
+            );
+          }
+
+          /*
+           * FLOW 1:
+           *
+           * PKCE
+           *
+           * homevault://auth/reset-password
+           * ?code=...
+           */
+          if (data.code) {
+            const {
+              data:
+                exchangeData,
+              error:
+                exchangeError,
+            } =
+              await supabase.auth
+                .exchangeCodeForSession(
+                  data.code,
+                );
+
+            if (exchangeError) {
+              throw exchangeError;
+            }
+
+            if (
+              !exchangeData.session
+            ) {
+              throw new Error(
+                'Supabase nie utworzył sesji po wymianie kodu recovery.',
+              );
+            }
+
+            await markRecoveryReady();
+
+            return;
+          }
+
+          /*
+           * FLOW 2:
+           *
+           * token_hash
+           *
+           * homevault://auth/reset-password
+           * ?token_hash=...
+           * &type=recovery
+           */
+          if (data.tokenHash) {
+            if (
+              data.type &&
+              data.type !==
+                'recovery'
+            ) {
+              throw new Error(
+                'Link nie jest linkiem resetującym hasło.',
+              );
+            }
+
+            const {
+              data:
+                verifyData,
+              error:
+                verifyError,
+            } =
+              await supabase.auth
+                .verifyOtp({
+                  token_hash:
+                    data.tokenHash,
+
+                  type:
+                    'recovery',
+                });
+
+            if (verifyError) {
+              throw verifyError;
+            }
+
+            if (
+              !verifyData.session
+            ) {
+              throw new Error(
+                'Supabase nie utworzył sesji recovery po weryfikacji tokenu.',
+              );
+            }
+
+            await markRecoveryReady();
+
+            return;
+          }
+
+          /*
+           * FLOW 3:
+           *
+           * Implicit flow
+           *
+           * homevault://auth/reset-password
+           * #access_token=...
+           * &refresh_token=...
+           * &type=recovery
+           */
+          if (
+            data.accessToken &&
+            data.refreshToken
+          ) {
+            if (
+              data.type &&
+              data.type !==
+                'recovery'
+            ) {
+              throw new Error(
+                'Link nie jest linkiem resetującym hasło.',
+              );
+            }
+
+            const {
+              data:
+                sessionData,
+              error:
+                sessionError,
+            } =
+              await supabase.auth
+                .setSession({
+                  access_token:
+                    data.accessToken,
+
+                  refresh_token:
+                    data.refreshToken,
+                });
+
+            if (sessionError) {
+              throw sessionError;
+            }
+
+            if (
+              !sessionData.session
+            ) {
+              throw new Error(
+                'Supabase nie utworzył sesji recovery.',
+              );
+            }
+
+            await markRecoveryReady();
+
+            return;
+          }
+
+          throw new Error(
+            'Nie udało się odczytać danych recovery z linku. Wyślij nowy link resetujący hasło.',
+          );
+        } catch (error) {
+          console.error(
+            'Błąd linku resetowania hasła:',
+            error,
+          );
+
+          recoveryUserIdRef.current =
+            null;
+
+          if (!mounted) {
+            return;
+          }
+
+          setRecoveryReady(
+            false,
+          );
+
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : 'Nie udało się zweryfikować linku resetującego hasło.',
+          );
+
+          setIsPreparing(
+            false,
+          );
+        } finally {
+          processingRef.current =
+            false;
+        }
+      };
+
+    const initialize =
+      async () => {
+        try {
+          /*
+           * Najważniejsze źródło:
+           * pełny URL przekazany przez OS.
+           *
+           * useLinkingURL obsługuje zarówno
+           * cold start, jak i kolejne linki.
+           */
+          if (linkingUrl) {
+            const marker =
+              `url:${linkingUrl}`;
+
+            if (
+              processedValueRef.current !==
+              marker
+            ) {
+              const urlData =
+                parseRecoveryUrl(
+                  linkingUrl,
+                );
+
+              if (
+                containsRecoveryData(
+                  urlData,
+                )
+              ) {
+                processedValueRef.current =
+                  marker;
+
+                await processRecoveryData(
+                  urlData,
+                );
+
+                return;
+              }
+            }
+          }
+
+          /*
+           * Fallback:
+           *
+           * Expo Router potrafi zachować
+           * query parameters nawet wtedy,
+           * kiedy pełny URL nie jest już
+           * dostępny.
+           */
+          const routerData:
+            RecoveryData = {
+            code:
+              firstValue(
+                routeParams.code,
+              ),
+
+            accessToken:
+              firstValue(
+                routeParams
+                  .access_token,
+              ),
+
+            refreshToken:
+              firstValue(
+                routeParams
+                  .refresh_token,
+              ),
+
+            tokenHash:
+              firstValue(
+                routeParams
+                  .token_hash,
+              ),
+
+            type:
+              firstValue(
+                routeParams.type,
+              ),
+
+            error:
+              firstValue(
+                routeParams
+                  .error_description,
+              ) ??
+              firstValue(
+                routeParams.error,
+              ) ??
+              firstValue(
+                routeParams
+                  .error_code,
+              ),
+          };
+
+          if (
+            containsRecoveryData(
+              routerData,
+            )
+          ) {
+            const marker =
+              JSON.stringify(
+                routerData,
+              );
+
+            if (
+              processedValueRef.current !==
+              marker
+            ) {
+              processedValueRef.current =
+                marker;
+
+              await processRecoveryData(
+                routerData,
+              );
+
+              return;
+            }
+          }
+
+          /*
+           * Nie używamy tu getSession()
+           * jako fallbacku.
+           *
+           * Zwykła aktywna sesja
+           * nie oznacza, że użytkownik
+           * wszedł przez recovery link.
+           */
+          throw new Error(
+            'Nie udało się odczytać danych recovery z linku. Wyślij nowy link resetujący hasło.',
+          );
+        } catch (error) {
+          console.error(
+            'Błąd przygotowania resetu hasła:',
+            error,
+          );
+
+          recoveryUserIdRef.current =
+            null;
+
+          if (!mounted) {
+            return;
+          }
+
+          setRecoveryReady(
+            false,
+          );
+
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : 'Nie udało się zweryfikować linku.',
+          );
+
+          setIsPreparing(
+            false,
+          );
+        }
+      };
+
+    void initialize();
+
+    return () => {
+      mounted = false;
+    };
+  }, [
+    linkingUrl,
+    routeParams.code,
+    routeParams.access_token,
+    routeParams.refresh_token,
+    routeParams.token_hash,
+    routeParams.type,
+    routeParams.error,
+    routeParams.error_description,
+    routeParams.error_code,
+  ]);
+
+  const showError = (
     title: string,
     message: string,
   ) => {
-    if (Platform.OS === 'web') {
+    if (
+      Platform.OS === 'web'
+    ) {
       window.alert(
         `${title}\n\n${message}`,
       );
@@ -148,183 +726,57 @@ export default function ResetPasswordScreen() {
     );
   };
 
-  useEffect(() => {
-    let mounted = true;
+  const showSuccess =
+    () => {
+      if (
+        Platform.OS === 'web'
+      ) {
+        window.alert(
+          'Hasło zostało zmienione. Możesz teraz zalogować się nowym hasłem.',
+        );
 
-    const processUrl =
-      async (
-        url: string | null,
-      ) => {
-        if (!url) {
-          return;
-        }
+        router.replace(
+          '/login',
+        );
 
-        try {
-          const params =
-            parseRecoveryUrl(
-              url,
-            );
+        return;
+      }
 
-          if (
-            params.errorDescription
-          ) {
-            throw new Error(
-              decodeURIComponent(
-                params.errorDescription,
+      Alert.alert(
+        'Hasło zmienione',
+        'Możesz teraz zalogować się nowym hasłem.',
+        [
+          {
+            text: 'OK',
+
+            onPress: () =>
+              router.replace(
+                '/login',
               ),
-            );
-          }
-
-          if (params.code) {
-            const {
-              error,
-            } =
-              await supabase.auth
-                .exchangeCodeForSession(
-                  params.code,
-                );
-
-            if (error) {
-              throw error;
-            }
-
-            if (mounted) {
-              setRecoveryReady(
-                true,
-              );
-            }
-
-            return;
-          }
-
-          if (
-            params.accessToken &&
-            params.refreshToken
-          ) {
-            const {
-              error,
-            } =
-              await supabase.auth
-                .setSession({
-                  access_token:
-                    params.accessToken,
-
-                  refresh_token:
-                    params.refreshToken,
-                });
-
-            if (error) {
-              throw error;
-            }
-
-            if (mounted) {
-              setRecoveryReady(
-                true,
-              );
-            }
-
-            return;
-          }
-
-          throw new Error(
-            'Link resetujący hasło jest nieprawidłowy lub wygasł.',
-          );
-        } catch (error) {
-          console.error(
-            'Błąd linku resetowania hasła:',
-            error,
-          );
-
-          if (mounted) {
-            setErrorMessage(
-              error instanceof Error
-                ? error.message
-                : 'Nie udało się otworzyć linku resetującego hasło.',
-            );
-          }
-        } finally {
-          if (mounted) {
-            setIsPreparing(false);
-          }
-        }
-      };
-
-    const {
-      data: authListener,
-    } =
-      supabase.auth
-        .onAuthStateChange(
-          (
-            event,
-          ) => {
-            if (
-              event ===
-              'PASSWORD_RECOVERY'
-            ) {
-              setRecoveryReady(
-                true,
-              );
-
-              setIsPreparing(
-                false,
-              );
-            }
           },
-        );
-
-    const linkSubscription =
-      Linking.addEventListener(
-        'url',
-        ({
-          url,
-        }) => {
-          void processUrl(
-            url,
-          );
-        },
+        ],
       );
-
-    const initialize =
-      async () => {
-        let initialUrl =
-          await Linking
-            .getInitialURL();
-
-        if (
-          !initialUrl &&
-          Platform.OS ===
-            'web' &&
-          typeof window !==
-            'undefined'
-        ) {
-          initialUrl =
-            window.location.href;
-        }
-
-        await processUrl(
-          initialUrl,
-        );
-      };
-
-    void initialize();
-
-    return () => {
-      mounted = false;
-
-      linkSubscription.remove();
-
-      authListener
-        .subscription
-        .unsubscribe();
     };
-  }, []);
 
   const handleSave =
     async () => {
       if (
+        !recoveryReady ||
+        !recoveryUserIdRef
+          .current
+      ) {
+        showError(
+          'Brak sesji recovery',
+          'Wyślij nowy link resetujący hasło.',
+        );
+
+        return;
+      }
+
+      if (
         password.length < 6
       ) {
-        showMessage(
+        showError(
           'Hasło jest za krótkie',
           'Hasło powinno mieć co najmniej 6 znaków.',
         );
@@ -336,7 +788,7 @@ export default function ResetPasswordScreen() {
         password !==
         confirmPassword
       ) {
-        showMessage(
+        showError(
           'Hasła są różne',
           'Wpisz takie samo hasło w obu polach.',
         );
@@ -345,9 +797,44 @@ export default function ResetPasswordScreen() {
       }
 
       try {
-        setIsSaving(true);
+        setIsSaving(
+          true,
+        );
+
+        /*
+         * Jeszcze raz sprawdzamy,
+         * czy aktualna sesja należy
+         * do użytkownika utworzonego
+         * z recovery linka.
+         */
+        const {
+          data: {
+            user:
+              currentUser,
+          },
+          error:
+            userError,
+        } =
+          await supabase.auth
+            .getUser();
+
+        if (userError) {
+          throw userError;
+        }
+
+        if (
+          !currentUser ||
+          currentUser.id !==
+            recoveryUserIdRef
+              .current
+        ) {
+          throw new Error(
+            'Sesja użytkownika zmieniła się podczas resetowania hasła. Wyślij nowy link.',
+          );
+        }
 
         const {
+          data,
           error,
         } =
           await supabase.auth
@@ -359,46 +846,70 @@ export default function ResetPasswordScreen() {
           throw error;
         }
 
+        if (
+          !data.user ||
+          data.user.id !==
+            recoveryUserIdRef
+              .current
+        ) {
+          throw new Error(
+            'Supabase zaktualizował nieoczekiwane konto.',
+          );
+        }
+
         /*
-         * Recovery tworzy sesję.
-         * Po zmianie hasła kończymy ją,
-         * aby użytkownik zalogował się
-         * już nowym hasłem.
+         * Po poprawnej zmianie hasła
+         * usuwamy lokalną sesję recovery.
          */
-        await supabase.auth
-          .signOut({
-            scope: 'local',
-          });
+        const {
+          error:
+            signOutError,
+        } =
+          await supabase.auth
+            .signOut({
+              scope: 'local',
+            });
 
-        showMessage(
-          'Hasło zmienione',
-          'Możesz teraz zalogować się nowym hasłem.',
+        if (signOutError) {
+          console.warn(
+            'Hasło zmienione, ale nie udało się usunąć lokalnej sesji:',
+            signOutError,
+          );
+        }
+
+        recoveryUserIdRef.current =
+          null;
+
+        setRecoveryReady(
+          false,
         );
 
-        router.replace(
-          '/login',
-        );
+        showSuccess();
       } catch (error) {
         console.error(
           'Błąd zmiany hasła:',
           error,
         );
 
-        showMessage(
+        showError(
           'Nie udało się zmienić hasła',
           error instanceof Error
             ? error.message
             : 'Spróbuj ponownie.',
         );
       } finally {
-        setIsSaving(false);
+        setIsSaving(
+          false,
+        );
       }
     };
 
   if (isPreparing) {
     return (
       <SafeAreaView
-        style={styles.container}
+        style={
+          styles.container
+        }
       >
         <View
           style={
@@ -427,7 +938,9 @@ export default function ResetPasswordScreen() {
   ) {
     return (
       <SafeAreaView
-        style={styles.container}
+        style={
+          styles.container
+        }
       >
         <View
           style={
@@ -476,10 +989,14 @@ export default function ResetPasswordScreen() {
 
   return (
     <SafeAreaView
-      style={styles.container}
+      style={
+        styles.container
+      }
     >
       <KeyboardAvoidingView
-        style={styles.container}
+        style={
+          styles.container
+        }
         behavior={
           Platform.OS === 'ios'
             ? 'padding'
@@ -492,8 +1009,16 @@ export default function ResetPasswordScreen() {
           }
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.card}>
-            <Text style={styles.title}>
+          <View
+            style={
+              styles.card
+            }
+          >
+            <Text
+              style={
+                styles.title
+              }
+            >
               Ustaw nowe hasło
             </Text>
 
@@ -502,24 +1027,33 @@ export default function ResetPasswordScreen() {
                 styles.description
               }
             >
-              Podaj nowe hasło do
-              konta HomeVault.
+              Podaj nowe hasło do konta HomeVault.
             </Text>
 
-            <Text style={styles.label}>
+            <Text
+              style={
+                styles.label
+              }
+            >
               Nowe hasło
             </Text>
 
             <TextInput
-              value={password}
+              value={
+                password
+              }
               onChangeText={
                 setPassword
               }
               secureTextEntry
               autoComplete="new-password"
               textContentType="newPassword"
-              editable={!isSaving}
-              style={styles.input}
+              editable={
+                !isSaving
+              }
+              style={
+                styles.input
+              }
             />
 
             <Text
@@ -541,12 +1075,18 @@ export default function ResetPasswordScreen() {
               secureTextEntry
               autoComplete="new-password"
               textContentType="newPassword"
-              editable={!isSaving}
-              style={styles.input}
+              editable={
+                !isSaving
+              }
+              style={
+                styles.input
+              }
             />
 
             <Pressable
-              disabled={isSaving}
+              disabled={
+                isSaving
+              }
               onPress={
                 handleSave
               }
@@ -600,7 +1140,8 @@ const styles =
 
     center: {
       flex: 1,
-      alignItems: 'center',
+      alignItems:
+        'center',
       justifyContent:
         'center',
     },
@@ -624,7 +1165,8 @@ const styles =
     card: {
       width: '100%',
       maxWidth: 460,
-      alignSelf: 'center',
+      alignSelf:
+        'center',
       backgroundColor:
         '#FFFFFF',
       borderWidth: 1,
@@ -636,13 +1178,15 @@ const styles =
 
     title: {
       fontSize: 28,
-      fontWeight: '700',
+      fontWeight:
+        '700',
       color: '#111827',
     },
 
     errorTitle: {
       fontSize: 22,
-      fontWeight: '700',
+      fontWeight:
+        '700',
       color: '#B91C1C',
     },
 
@@ -657,7 +1201,8 @@ const styles =
     label: {
       marginBottom: 7,
       fontSize: 14,
-      fontWeight: '600',
+      fontWeight:
+        '600',
       color: '#374151',
     },
 
@@ -685,14 +1230,16 @@ const styles =
       borderRadius: 12,
       backgroundColor:
         '#111827',
-      alignItems: 'center',
+      alignItems:
+        'center',
       justifyContent:
         'center',
     },
 
     primaryButtonText: {
       fontSize: 15,
-      fontWeight: '700',
+      fontWeight:
+        '700',
       color: '#FFFFFF',
     },
 
