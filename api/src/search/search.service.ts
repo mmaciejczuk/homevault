@@ -1,30 +1,17 @@
-import {
-  Injectable,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
-import {
-  PrismaService,
-} from '../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class SearchService {
-  constructor(
-    private readonly prisma:
-      PrismaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  async search(
-    query: string,
-    ownerId: string,
-  ) {
-    const q =
-      query.trim();
+  async search(userId: string, rawQuery?: string) {
+    const query = rawQuery?.trim() ?? '';
 
-    if (
-      q.length < 2
-    ) {
+    if (query.length < 2) {
       return {
-        query: q,
+        query,
         properties: [],
         rooms: [],
         entries: [],
@@ -32,222 +19,241 @@ export class SearchService {
       };
     }
 
-    const [
-      properties,
-      rooms,
-      entries,
-      documents,
-    ] =
-      await Promise.all([
-        this.prisma.property.findMany({
-          where: {
-            ownerId,
+    /*
+     * Tagi zapisujemy znormalizowane małymi literami,
+     * więc dla wyszukiwania po tagu robimy to samo.
+     */
+    const normalizedTag = query.toLowerCase();
 
-            OR: [
-              {
-                name: {
-                  contains: q,
-                  mode:
-                    'insensitive',
-                },
-              },
+    const [properties, rooms, entries, documents] = await Promise.all([
+      /*
+       * NIERUCHOMOŚCI
+       */
+      this.prisma.property.findMany({
+        where: {
+          ownerId: userId,
 
-              {
-                address: {
-                  contains: q,
-                  mode:
-                    'insensitive',
-                },
-              },
-            ],
-          },
-
-          select: {
-            id: true,
-            name: true,
-            address: true,
-            yearBuilt: true,
-          },
-
-          orderBy: {
-            name: 'asc',
-          },
-
-          take: 20,
-        }),
-
-        this.prisma.room.findMany({
-          where: {
-            property: {
-              ownerId,
-            },
-
-            OR: [
-              {
-                name: {
-                  contains: q,
-                  mode:
-                    'insensitive',
-                },
-              },
-
-              {
-                floor: {
-                  contains: q,
-                  mode:
-                    'insensitive',
-                },
-              },
-
-              {
-                description: {
-                  contains: q,
-                  mode:
-                    'insensitive',
-                },
-              },
-            ],
-          },
-
-          select: {
-            id: true,
-            name: true,
-            floor: true,
-            description: true,
-            propertyId: true,
-
-            property: {
-              select: {
-                id: true,
-                name: true,
+          OR: [
+            {
+              name: {
+                contains: query,
+                mode: 'insensitive',
               },
             },
+            {
+              address: {
+                contains: query,
+                mode: 'insensitive',
+              },
+            },
+          ],
+        },
+
+        select: {
+          id: true,
+          name: true,
+          address: true,
+          yearBuilt: true,
+        },
+
+        orderBy: {
+          name: 'asc',
+        },
+
+        take: 20,
+      }),
+
+      /*
+       * POMIESZCZENIA
+       */
+      this.prisma.room.findMany({
+        where: {
+          property: {
+            ownerId: userId,
           },
 
-          orderBy: {
-            name: 'asc',
+          OR: [
+            {
+              name: {
+                contains: query,
+                mode: 'insensitive',
+              },
+            },
+            {
+              floor: {
+                contains: query,
+                mode: 'insensitive',
+              },
+            },
+            {
+              description: {
+                contains: query,
+                mode: 'insensitive',
+              },
+            },
+          ],
+        },
+
+        select: {
+          id: true,
+          name: true,
+          floor: true,
+          description: true,
+          propertyId: true,
+
+          property: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+
+        orderBy: {
+          name: 'asc',
+        },
+
+        take: 20,
+      }),
+
+      /*
+       * WPISY
+       *
+       * Szukamy po:
+       * - tytule
+       * - opisie
+       * - tagu
+       */
+      this.prisma.entry.findMany({
+        where: {
+          room: {
+            property: {
+              ownerId: userId,
+            },
           },
 
-          take: 20,
-        }),
+          OR: [
+            {
+              title: {
+                contains: query,
+                mode: 'insensitive',
+              },
+            },
 
-        this.prisma.entry.findMany({
-          where: {
+            {
+              description: {
+                contains: query,
+                mode: 'insensitive',
+              },
+            },
+
+            {
+              tags: {
+                has: normalizedTag,
+              },
+            },
+          ],
+        },
+
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          category: true,
+          tags: true,
+          roomId: true,
+          createdAt: true,
+          updatedAt: true,
+
+          room: {
+            select: {
+              id: true,
+              name: true,
+
+              property: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+
+        orderBy: {
+          updatedAt: 'desc',
+        },
+
+        take: 30,
+      }),
+
+      /*
+       * DOKUMENTY
+       *
+       * Na tym etapie wyszukujemy po nazwie pliku.
+       * Później OCR pozwoli szukać również
+       * po treści dokumentu.
+       */
+      this.prisma.attachment.findMany({
+        where: {
+          kind: 'DOCUMENT',
+
+          fileName: {
+            contains: query,
+            mode: 'insensitive',
+          },
+
+          entry: {
             room: {
               property: {
-                ownerId,
-              },
-            },
-
-            OR: [
-              {
-                title: {
-                  contains: q,
-                  mode:
-                    'insensitive',
-                },
-              },
-
-              {
-                description: {
-                  contains: q,
-                  mode:
-                    'insensitive',
-                },
-              },
-            ],
-          },
-
-          select: {
-            id: true,
-            title: true,
-            description: true,
-            category: true,
-            roomId: true,
-
-            room: {
-              select: {
-                id: true,
-                name: true,
-
-                property: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
+                ownerId: userId,
               },
             },
           },
+        },
 
-          orderBy: {
-            updatedAt:
-              'desc',
-          },
+        select: {
+          id: true,
+          fileName: true,
+          storagePath: true,
+          mimeType: true,
+          size: true,
+          kind: true,
+          entryId: true,
+          createdAt: true,
 
-          take: 30,
-        }),
+          entry: {
+            select: {
+              id: true,
+              title: true,
 
-        this.prisma.attachment.findMany({
-          where: {
-            kind:
-              'DOCUMENT',
-
-            entry: {
               room: {
-                property: {
-                  ownerId,
-                },
-              },
-            },
+                select: {
+                  id: true,
+                  name: true,
 
-            fileName: {
-              contains: q,
-              mode:
-                'insensitive',
-            },
-          },
-
-          select: {
-            id: true,
-            fileName: true,
-            mimeType: true,
-            size: true,
-            entryId: true,
-
-            entry: {
-              select: {
-                id: true,
-                title: true,
-
-                room: {
-                  select: {
-                    id: true,
-                    name: true,
-
-                    property: {
-                      select: {
-                        id: true,
-                        name: true,
-                      },
+                  property: {
+                    select: {
+                      id: true,
+                      name: true,
                     },
                   },
                 },
               },
             },
           },
+        },
 
-          orderBy: {
-            createdAt:
-              'desc',
-          },
+        orderBy: {
+          createdAt: 'desc',
+        },
 
-          take: 20,
-        }),
-      ]);
+        take: 20,
+      }),
+    ]);
 
     return {
-      query: q,
+      query,
       properties,
       rooms,
       entries,
