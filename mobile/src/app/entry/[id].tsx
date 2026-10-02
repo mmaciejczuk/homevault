@@ -1,6 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 
 import {
+  router,
   useFocusEffect,
   useLocalSearchParams,
 } from 'expo-router';
@@ -623,6 +624,103 @@ export default function EntryDetailsScreen() {
     }
   };
 
+  const handleEditEntry = () => {
+  router.push({
+    pathname:
+      '/entry/[id]/edit',
+
+    params: {
+      id,
+    },
+  });
+};
+
+const handleDeleteEntry =
+  async () => {
+    if (!id) {
+      return;
+    }
+
+    const confirmed =
+      Platform.OS === 'web'
+        ? window.confirm(
+            'Czy na pewno chcesz usunąć ten wpis wraz ze zdjęciami?',
+          )
+        : await new Promise<boolean>(
+            (
+              resolve,
+            ) => {
+              Alert.alert(
+                'Usuń wpis',
+
+                'Usunięte zostaną także wszystkie zdjęcia przypisane do wpisu.',
+
+                [
+                  {
+                    text:
+                      'Anuluj',
+
+                    style:
+                      'cancel',
+
+                    onPress:
+                      () =>
+                        resolve(
+                          false,
+                        ),
+                  },
+
+                  {
+                    text:
+                      'Usuń',
+
+                    style:
+                      'destructive',
+
+                    onPress:
+                      () =>
+                        resolve(
+                          true,
+                        ),
+                  },
+                ],
+              );
+            },
+          );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response =
+        await apiFetch(
+          `/entries/${id}`,
+          {
+            method:
+              'DELETE',
+          },
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          await response.text(),
+        );
+      }
+
+      router.back();
+    } catch (error) {
+      console.error(
+        'Błąd usuwania wpisu:',
+        error,
+      );
+
+      showMessage(
+        'Nie udało się usunąć wpisu.',
+      );
+    }
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView
@@ -776,6 +874,60 @@ export default function EntryDetailsScreen() {
             }
           </Text>
         )}
+
+        <View
+          style={{
+            flexDirection: 'row',
+            gap: 12,
+            marginTop: 20,
+          }}
+        >
+          <Pressable
+            onPress={handleEditEntry}
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: '#D1D5DB',
+              backgroundColor:
+                '#FFFFFF',
+            }}
+          >
+            <Text
+              style={{
+                fontWeight:
+                  '600',
+              }}
+            >
+              ✏️ Edytuj
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={
+              handleDeleteEntry
+            }
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              borderRadius: 10,
+              backgroundColor:
+                '#FEE2E2',
+            }}
+          >
+            <Text
+              style={{
+                color:
+                  '#B91C1C',
+                fontWeight:
+                  '600',
+              }}
+            >
+              🗑 Usuń wpis
+            </Text>
+          </Pressable>
+        </View>
 
         <View
           style={

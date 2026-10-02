@@ -11,6 +11,8 @@ import {
 
 import {
   ActivityIndicator,
+  Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -191,6 +193,104 @@ export default function RoomDetailsScreen() {
     });
   };
 
+const handleEditRoom = () => {
+  router.push({
+    pathname:
+      '/room/[id]/edit',
+
+    params: {
+      id,
+    },
+  });
+};
+
+const handleDeleteRoom =
+  async () => {
+    if (!id) {
+      return;
+    }
+
+    const confirmed =
+      Platform.OS === 'web'
+        ? window.confirm(
+            'Usunąć pomieszczenie wraz ze wszystkimi wpisami i zdjęciami?',
+          )
+        : await new Promise<boolean>(
+            (
+              resolve,
+            ) => {
+              Alert.alert(
+                'Usuń pomieszczenie',
+
+                'Usunięte zostaną również wpisy i zdjęcia.',
+
+                [
+                  {
+                    text:
+                      'Anuluj',
+
+                    style:
+                      'cancel',
+
+                    onPress:
+                      () =>
+                        resolve(
+                          false,
+                        ),
+                  },
+
+                  {
+                    text:
+                      'Usuń',
+
+                    style:
+                      'destructive',
+
+                    onPress:
+                      () =>
+                        resolve(
+                          true,
+                        ),
+                  },
+                ],
+              );
+            },
+          );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response =
+        await apiFetch(
+          `/rooms/${id}`,
+          {
+            method:
+              'DELETE',
+          },
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          await response.text(),
+        );
+      }
+
+      router.back();
+    } catch (error) {
+      console.error(
+        'Błąd usuwania pomieszczenia:',
+        error,
+      );
+
+      Alert.alert(
+        'Błąd',
+        'Nie udało się usunąć pomieszczenia.',
+      );
+    }
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView
@@ -285,6 +385,53 @@ export default function RoomDetailsScreen() {
             {room.description}
           </Text>
         )}
+
+        <View
+          style={{
+            flexDirection: 'row',
+            gap: 12,
+            marginTop: 20,
+          }}
+        >
+          <Pressable
+            onPress={handleEditRoom}
+            style={{
+              padding: 12,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: '#D1D5DB',
+              backgroundColor:
+                '#FFFFFF',
+            }}
+          >
+            <Text>
+              ✏️ Edytuj
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={
+              handleDeleteRoom
+            }
+            style={{
+              padding: 12,
+              borderRadius: 10,
+              backgroundColor:
+                '#FEE2E2',
+            }}
+          >
+            <Text
+              style={{
+                color:
+                  '#B91C1C',
+                fontWeight:
+                  '600',
+              }}
+            >
+              🗑 Usuń
+            </Text>
+          </Pressable>
+        </View>
 
         <View
           style={styles.headerRow}

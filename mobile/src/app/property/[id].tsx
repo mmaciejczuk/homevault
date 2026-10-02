@@ -1,15 +1,18 @@
 import {
   router,
+  useFocusEffect,
   useLocalSearchParams,
 } from 'expo-router';
 
 import {
-  useEffect,
+  useCallback,
   useState,
 } from 'react';
 
 import {
   ActivityIndicator,
+  Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,7 +24,9 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
-import { apiFetch } from '../../lib/api';
+import {
+  apiFetch,
+} from '../../lib/api';
 
 interface Property {
   id: number;
@@ -32,91 +37,240 @@ interface Property {
 
 export default function PropertyDetailsScreen() {
   const { id } =
-    useLocalSearchParams<{ id: string }>();
+    useLocalSearchParams<{
+      id: string;
+    }>();
 
   const [property, setProperty] =
-    useState<Property | null>(null);
+    useState<Property | null>(
+      null,
+    );
 
   const [isLoading, setIsLoading] =
     useState(true);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [isDeleting, setIsDeleting] =
+    useState(false);
 
-  useEffect(() => {
-    const loadProperty = async () => {
+  const [error, setError] =
+    useState<string | null>(
+      null,
+    );
+
+  const loadProperty =
+    useCallback(
+      async () => {
+        if (!id) {
+          return;
+        }
+
+        try {
+          setIsLoading(
+            true,
+          );
+
+          setError(
+            null,
+          );
+
+          const response =
+            await apiFetch(
+              `/properties/${id}`,
+            );
+
+          if (!response.ok) {
+            throw new Error(
+              await response.text(),
+            );
+          }
+
+          setProperty(
+            await response.json(),
+          );
+        } catch (err) {
+          console.error(
+            'Błąd pobierania domu:',
+            err,
+          );
+
+          setError(
+            'Nie udało się pobrać nieruchomości.',
+          );
+        } finally {
+          setIsLoading(
+            false,
+          );
+        }
+      },
+      [id],
+    );
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadProperty();
+    }, [loadProperty]),
+  );
+
+  const handleEdit = () => {
+    router.push({
+      pathname:
+        '/property/[id]/edit',
+
+      params: {
+        id,
+      },
+    });
+  };
+
+  const handleOpenRooms = () => {
+    router.push({
+      pathname:
+        '/property/[id]/rooms',
+
+      params: {
+        id,
+      },
+    });
+  };
+
+  const askDelete =
+    async () => {
+      if (
+        Platform.OS ===
+        'web'
+      ) {
+        return window.confirm(
+          'Usunąć ten dom wraz ze wszystkimi pomieszczeniami, wpisami i zdjęciami?',
+        );
+      }
+
+      return new Promise<boolean>(
+        (
+          resolve,
+        ) => {
+          Alert.alert(
+            'Usuń dom',
+
+            'Usunięte zostaną także wszystkie pomieszczenia, wpisy i zdjęcia.',
+
+            [
+              {
+                text:
+                  'Anuluj',
+
+                style:
+                  'cancel',
+
+                onPress: () =>
+                  resolve(
+                    false,
+                  ),
+              },
+
+              {
+                text:
+                  'Usuń',
+
+                style:
+                  'destructive',
+
+                onPress: () =>
+                  resolve(
+                    true,
+                  ),
+              },
+            ],
+
+            {
+              cancelable:
+                true,
+
+              onDismiss:
+                () =>
+                  resolve(
+                    false,
+                  ),
+            },
+          );
+        },
+      );
+    };
+
+  const handleDelete =
+    async () => {
+      if (!id) {
+        return;
+      }
+
+      if (
+        !(await askDelete())
+      ) {
+        return;
+      }
+
       try {
-        setIsLoading(true);
-        setError(null);
+        setIsDeleting(
+          true,
+        );
 
         const response =
           await apiFetch(
             `/properties/${id}`,
+            {
+              method:
+                'DELETE',
+            },
           );
 
         if (!response.ok) {
-          const responseBody =
-            await response.text();
-
           throw new Error(
-            `API zwróciło status ${response.status}: ${responseBody}`,
+            await response.text(),
           );
         }
 
-        const data: Property =
-          await response.json();
-
-        console.log(
-          'Pobrano nieruchomość:',
-          data,
-        );
-
-        setProperty(data);
+        router.replace('/');
       } catch (err) {
         console.error(
-          'Błąd pobierania domu:',
+          'Błąd usuwania domu:',
           err,
         );
 
-        setError(
-          'Nie udało się pobrać nieruchomości.',
-        );
+        if (
+          Platform.OS ===
+          'web'
+        ) {
+          window.alert(
+            'Nie udało się usunąć domu.',
+          );
+        } else {
+          Alert.alert(
+            'Błąd',
+            'Nie udało się usunąć domu.',
+          );
+        }
       } finally {
-        setIsLoading(false);
+        setIsDeleting(
+          false,
+        );
       }
     };
-
-    if (id) {
-      loadProperty();
-    }
-  }, [id]);
-
-  const handleOpenRooms = () => {
-    if (!property) {
-      return;
-    }
-
-    router.push({
-      pathname: '/property/[id]/rooms',
-      params: {
-        id: property.id.toString(),
-      },
-    });
-  };
 
   if (isLoading) {
     return (
       <SafeAreaView
         style={styles.container}
-        edges={['bottom']}
       >
-        <View style={styles.center}>
+        <View
+          style={styles.center}
+        >
           <ActivityIndicator
             size="large"
           />
 
           <Text
-            style={styles.loadingText}
+            style={
+              styles.infoText
+            }
           >
             Pobieranie domu...
           </Text>
@@ -125,41 +279,32 @@ export default function PropertyDetailsScreen() {
     );
   }
 
-  if (error || !property) {
+  if (
+    error ||
+    !property
+  ) {
     return (
       <SafeAreaView
         style={styles.container}
-        edges={['bottom']}
       >
-        <View style={styles.center}>
+        <View
+          style={styles.center}
+        >
           <Text
-            style={styles.errorTitle}
+            style={
+              styles.errorTitle
+            }
           >
             Nie udało się otworzyć domu
           </Text>
 
           <Text
-            style={styles.errorText}
+            style={
+              styles.infoText
+            }
           >
             {error}
           </Text>
-
-          <Pressable
-            style={
-              styles.secondaryButton
-            }
-            onPress={() =>
-              router.back()
-            }
-          >
-            <Text
-              style={
-                styles.secondaryButtonText
-              }
-            >
-              Wróć
-            </Text>
-          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -176,315 +321,271 @@ export default function PropertyDetailsScreen() {
         }
       >
         <Text
-          style={styles.houseIcon}
+          style={styles.icon}
         >
           🏠
         </Text>
 
-        <Text style={styles.name}>
+        <Text
+          style={styles.name}
+        >
           {property.name}
         </Text>
 
         {property.address && (
-          <Text style={styles.detail}>
+          <Text
+            style={
+              styles.detail
+            }
+          >
             📍 {property.address}
           </Text>
         )}
 
         {property.yearBuilt && (
-          <Text style={styles.detail}>
+          <Text
+            style={
+              styles.detail
+            }
+          >
             Rok budowy:{' '}
             {property.yearBuilt}
           </Text>
         )}
 
-        <View style={styles.section}>
-          <Text
-            style={styles.sectionTitle}
-          >
-            Dokumentacja domu
-          </Text>
-
+        <View
+          style={
+            styles.actions
+          }
+        >
           <Pressable
-            style={({ pressed }) => [
-              styles.menuCard,
-              pressed &&
-                styles.menuCardPressed,
-            ]}
-            onPress={handleOpenRooms}
+            onPress={handleEdit}
+            style={
+              styles.editButton
+            }
           >
             <Text
-              style={styles.menuIcon}
+              style={
+                styles.editText
+              }
             >
-              🚪
-            </Text>
-
-            <View
-              style={styles.menuContent}
-            >
-              <Text
-                style={styles.menuTitle}
-              >
-                Pomieszczenia
-              </Text>
-
-              <Text
-                style={
-                  styles.menuDescription
-                }
-              >
-                Salon, kuchnia,
-                łazienka, kotłownia...
-              </Text>
-            </View>
-
-            <Text style={styles.arrow}>
-              ›
+              ✏️ Edytuj
             </Text>
           </Pressable>
 
           <Pressable
-            style={({ pressed }) => [
-              styles.menuCard,
-              pressed &&
-                styles.menuCardPressed,
-            ]}
-            onPress={() => {
-              console.log(
-                'Zdjęcia - do implementacji',
-              );
-            }}
+            disabled={
+              isDeleting
+            }
+            onPress={
+              handleDelete
+            }
+            style={
+              styles.deleteButton
+            }
           >
             <Text
-              style={styles.menuIcon}
+              style={
+                styles.deleteText
+              }
             >
-              📷
-            </Text>
-
-            <View
-              style={styles.menuContent}
-            >
-              <Text
-                style={styles.menuTitle}
-              >
-                Zdjęcia
-              </Text>
-
-              <Text
-                style={
-                  styles.menuDescription
-                }
-              >
-                Dokumentacja instalacji
-                i budowy
-              </Text>
-            </View>
-
-            <Text style={styles.arrow}>
-              ›
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.menuCard,
-              pressed &&
-                styles.menuCardPressed,
-            ]}
-            onPress={() => {
-              console.log(
-                'Dokumenty - do implementacji',
-              );
-            }}
-          >
-            <Text
-              style={styles.menuIcon}
-            >
-              📄
-            </Text>
-
-            <View
-              style={styles.menuContent}
-            >
-              <Text
-                style={styles.menuTitle}
-              >
-                Dokumenty
-              </Text>
-
-              <Text
-                style={
-                  styles.menuDescription
-                }
-              >
-                Faktury, gwarancje
-                i instrukcje
-              </Text>
-            </View>
-
-            <Text style={styles.arrow}>
-              ›
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.menuCard,
-              pressed &&
-                styles.menuCardPressed,
-            ]}
-            onPress={() => {
-              console.log(
-                'Zapytaj swój dom - do implementacji',
-              );
-            }}
-          >
-            <Text
-              style={styles.menuIcon}
-            >
-              🤖
-            </Text>
-
-            <View
-              style={styles.menuContent}
-            >
-              <Text
-                style={styles.menuTitle}
-              >
-                Zapytaj swój dom
-              </Text>
-
-              <Text
-                style={
-                  styles.menuDescription
-                }
-              >
-                Wyszukuj informacje
-                przy pomocy AI
-              </Text>
-            </View>
-
-            <Text style={styles.arrow}>
-              ›
+              {isDeleting
+                ? 'Usuwanie...'
+                : '🗑 Usuń'}
             </Text>
           </Pressable>
         </View>
+
+        <Text
+          style={
+            styles.sectionTitle
+          }
+        >
+          Dokumentacja domu
+        </Text>
+
+        <Pressable
+          onPress={
+            handleOpenRooms
+          }
+          style={
+            styles.menuCard
+          }
+        >
+          <Text
+            style={
+              styles.menuIcon
+            }
+          >
+            🚪
+          </Text>
+
+          <View
+            style={
+              styles.menuContent
+            }
+          >
+            <Text
+              style={
+                styles.menuTitle
+              }
+            >
+              Pomieszczenia
+            </Text>
+
+            <Text
+              style={
+                styles.detail
+              }
+            >
+              Salon, kuchnia,
+              łazienka...
+            </Text>
+          </View>
+
+          <Text
+            style={
+              styles.arrow
+            }
+          >
+            ›
+          </Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F7F8FA',
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        '#F7F8FA',
+    },
 
-  content: {
-    padding: 24,
-  },
+    content: {
+      padding: 24,
+    },
 
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    center: {
+      flex: 1,
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
+      padding: 24,
+    },
 
-  loadingText: {
-    marginTop: 12,
-    color: '#6B7280',
-  },
+    icon: {
+      fontSize: 54,
+    },
 
-  houseIcon: {
-    fontSize: 54,
-  },
+    name: {
+      marginTop: 16,
+      fontSize: 30,
+      fontWeight:
+        '700',
+      color: '#111827',
+    },
 
-  name: {
-    marginTop: 16,
-    fontSize: 30,
-    fontWeight: '700',
-    color: '#111827',
-  },
+    detail: {
+      marginTop: 8,
+      fontSize: 15,
+      color: '#6B7280',
+    },
 
-  detail: {
-    marginTop: 8,
-    fontSize: 15,
-    color: '#6B7280',
-  },
+    actions: {
+      marginTop: 24,
+      flexDirection:
+        'row',
+      gap: 12,
+    },
 
-  section: {
-    marginTop: 36,
-  },
+    editButton: {
+      padding: 13,
+      borderRadius: 10,
+      backgroundColor:
+        '#FFFFFF',
+      borderWidth: 1,
+      borderColor:
+        '#D1D5DB',
+    },
 
-  sectionTitle: {
-    marginBottom: 16,
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-  },
+    editText: {
+      fontWeight:
+        '600',
+      color: '#111827',
+    },
 
-  menuCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 18,
-    marginBottom: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+    deleteButton: {
+      padding: 13,
+      borderRadius: 10,
+      backgroundColor:
+        '#FEE2E2',
+    },
 
-  menuCardPressed: {
-    opacity: 0.7,
-  },
+    deleteText: {
+      color: '#B91C1C',
+      fontWeight:
+        '600',
+    },
 
-  menuIcon: {
-    fontSize: 30,
-  },
+    sectionTitle: {
+      marginTop: 36,
+      marginBottom: 16,
+      fontSize: 20,
+      fontWeight:
+        '700',
+      color: '#111827',
+    },
 
-  menuContent: {
-    flex: 1,
-    marginLeft: 16,
-  },
+    menuCard: {
+      backgroundColor:
+        '#FFFFFF',
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor:
+        '#E5E7EB',
+      padding: 18,
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+    },
 
-  menuTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#111827',
-  },
+    menuIcon: {
+      fontSize: 30,
+    },
 
-  menuDescription: {
-    marginTop: 4,
-    fontSize: 14,
-    color: '#6B7280',
-  },
+    menuContent: {
+      flex: 1,
+      marginLeft: 16,
+    },
 
-  arrow: {
-    fontSize: 30,
-    color: '#9CA3AF',
-  },
+    menuTitle: {
+      fontSize: 17,
+      fontWeight:
+        '600',
+      color: '#111827',
+    },
 
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-  },
+    arrow: {
+      fontSize: 30,
+      color: '#9CA3AF',
+    },
 
-  errorText: {
-    marginTop: 8,
-    color: '#6B7280',
-  },
+    infoText: {
+      marginTop: 10,
+      color: '#6B7280',
+      textAlign:
+        'center',
+    },
 
-  secondaryButton: {
-    marginTop: 24,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    backgroundColor: '#111827',
-    borderRadius: 12,
-  },
-
-  secondaryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-});
+    errorTitle: {
+      fontSize: 20,
+      fontWeight:
+        '700',
+      color: '#B91C1C',
+    },
+  });
