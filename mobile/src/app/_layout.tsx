@@ -38,6 +38,38 @@ function RootNavigator() {
 
   return (
     <Stack>
+      {/*
+       * Recovery/callback MUSZĄ być dostępne
+       * niezależnie od tego, czy Supabase
+       * utworzył już sesję.
+       */}
+      <Stack.Screen
+        name="auth/reset-password"
+        options={{
+          title:
+            'Nowe hasło',
+        }}
+      />
+
+      <Stack.Screen
+        name="auth/callback"
+        options={{
+          headerShown:
+            false,
+        }}
+      />
+
+      <Stack.Screen
+        name="forgot-password"
+        options={{
+          title:
+            'Reset hasła',
+        }}
+      />
+
+      {/*
+       * Ekrany tylko dla niezalogowanego.
+       */}
       <Stack.Protected
         guard={!session}
       >
@@ -48,32 +80,12 @@ function RootNavigator() {
               false,
           }}
         />
-
-        <Stack.Screen
-          name="forgot-password"
-          options={{
-            title:
-              'Reset hasła',
-          }}
-        />
-
-        <Stack.Screen
-          name="auth/reset-password"
-          options={{
-            title:
-              'Nowe hasło',
-          }}
-        />
-
-        <Stack.Screen
-          name="auth/callback"
-          options={{
-            headerShown:
-              false,
-          }}
-        />
       </Stack.Protected>
 
+      {/*
+       * Ekrany aplikacji tylko
+       * dla zalogowanego użytkownika.
+       */}
       <Stack.Protected
         guard={!!session}
       >
