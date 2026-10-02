@@ -9,14 +9,14 @@ datasource db {
 }
 
 model Property {
-  id        Int      @id @default(autoincrement())
+  id        Int     @id @default(autoincrement())
   name      String
   address   String?
   yearBuilt Int?
 
-  ownerId   String
+  ownerId String
 
-  rooms     Room[]
+  rooms Room[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -25,7 +25,7 @@ model Property {
 }
 
 model Room {
-  id          Int      @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   name        String
   floor       String?
   description String?
@@ -46,12 +46,14 @@ model Entry {
   title       String
   description String?
   category    EntryCategory
-  tags        String[]       @default([])
+  tags        String[]      @default([])
 
   roomId Int
   room   Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   attachments Attachment[]
+
+  device Device?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -74,6 +76,68 @@ model Attachment {
   createdAt DateTime @default(now())
 
   @@index([entryId])
+}
+
+model Device {
+  id Int @id @default(autoincrement())
+
+  entryId Int   @unique
+  entry   Entry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  manufacturer String?
+  model        String?
+  serialNumber String?
+
+  purchaseDate  DateTime?
+  installedAt   DateTime?
+  warrantyUntil DateTime?
+
+  purchasePriceCents Int?
+
+  contractorName String?
+
+  serviceRecords ServiceRecord[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([warrantyUntil])
+  @@index([manufacturer])
+  @@index([serialNumber])
+}
+
+model ServiceRecord {
+  id Int @id @default(autoincrement())
+
+  deviceId Int
+  device   Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  type ServiceType
+
+  serviceDate DateTime
+
+  description String?
+
+  contractorName String?
+
+  costCents Int?
+
+  nextServiceDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deviceId])
+  @@index([serviceDate])
+  @@index([nextServiceDate])
+}
+
+enum ServiceType {
+  INSTALLATION
+  INSPECTION
+  REPAIR
+  MAINTENANCE
+  OTHER
 }
 
 enum EntryCategory {
