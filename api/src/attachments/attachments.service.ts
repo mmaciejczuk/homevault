@@ -20,6 +20,10 @@ import {
   StorageService,
 } from '../storage/storage.service';
 
+type AttachmentKind =
+  | 'IMAGE'
+  | 'DOCUMENT';
+
 @Injectable()
 export class AttachmentsService {
   constructor(
@@ -127,24 +131,16 @@ export class AttachmentsService {
       );
     }
 
-    if (
-      !file.mimetype.startsWith(
-        'image/',
-      )
-    ) {
-      throw new BadRequestException(
-        'Only image files are supported',
+    const kind =
+      this.getAttachmentKind(
+        file,
       );
-    }
-
-    const originalExtension =
-      extname(
-        file.originalname,
-      ).toLowerCase();
 
     const extension =
-      originalExtension ||
-      '.jpg';
+      this.getExtension(
+        file,
+        kind,
+      );
 
     const storagePath =
       `entries/${entryId}/` +
@@ -158,8 +154,7 @@ export class AttachmentsService {
           mimeType: string;
           size: number;
           kind:
-            | 'IMAGE'
-            | 'DOCUMENT';
+            AttachmentKind;
           entryId: number;
           createdAt: Date;
         }
@@ -188,8 +183,7 @@ export class AttachmentsService {
               size:
                 file.size,
 
-              kind:
-                'IMAGE',
+              kind,
 
               entryId,
             },
@@ -300,8 +294,87 @@ export class AttachmentsService {
 
     return {
       success: true,
+
       id:
         attachment.id,
     };
+  }
+
+  private getAttachmentKind(
+    file: Express.Multer.File,
+  ): AttachmentKind {
+    if (
+      file.mimetype.startsWith(
+        'image/',
+      )
+    ) {
+      return 'IMAGE';
+    }
+
+    if (
+      file.mimetype ===
+      'application/pdf'
+    ) {
+      return 'DOCUMENT';
+    }
+
+    throw new BadRequestException(
+      'Only image and PDF files are supported',
+    );
+  }
+
+  private getExtension(
+    file: Express.Multer.File,
+    kind: AttachmentKind,
+  ) {
+    const originalExtension =
+      extname(
+        file.originalname,
+      ).toLowerCase();
+
+    if (
+      originalExtension
+    ) {
+      return originalExtension;
+    }
+
+    if (
+      kind ===
+      'DOCUMENT'
+    ) {
+      return '.pdf';
+    }
+
+    return this.getImageExtension(
+      file.mimetype,
+    );
+  }
+
+  private getImageExtension(
+    mimeType: string,
+  ) {
+    switch (
+      mimeType.toLowerCase()
+    ) {
+      case 'image/png':
+        return '.png';
+
+      case 'image/webp':
+        return '.webp';
+
+      case 'image/gif':
+        return '.gif';
+
+      case 'image/heic':
+        return '.heic';
+
+      case 'image/heif':
+        return '.heif';
+
+      case 'image/jpeg':
+      case 'image/jpg':
+      default:
+        return '.jpg';
+    }
   }
 }

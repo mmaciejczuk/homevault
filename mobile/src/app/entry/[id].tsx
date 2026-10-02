@@ -1,3 +1,4 @@
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 
 import {
@@ -9,6 +10,7 @@ import {
 
 import {
   useCallback,
+  useMemo,
   useState,
 } from 'react';
 
@@ -16,6 +18,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -69,19 +72,17 @@ interface Entry {
   updatedAt: string;
 }
 
-interface Property {
-  id: number;
-  name: string;
-}
-
 interface Room {
   id: number;
   name: string;
   floor?: string | null;
   description?: string | null;
   propertyId: number;
+}
 
-  property?: Property;
+interface Property {
+  id: number;
+  name: string;
 }
 
 interface Attachment {
@@ -99,40 +100,19 @@ interface Attachment {
 }
 
 const categoryLabels:
-  Record<
-    EntryCategory,
-    string
-  > = {
-    ELECTRICAL:
-      'Elektryka',
-
-    PLUMBING:
-      'Hydraulika',
-
-    HEATING:
-      'Ogrzewanie',
-
-    WALL:
-      'Ściany',
-
-    FLOOR:
-      'Podłoga',
-
-    DEVICE:
-      'Urządzenie',
-
-    NOTE:
-      'Notatka',
-
-    OTHER:
-      'Inne',
+  Record<EntryCategory, string> = {
+    ELECTRICAL: 'Elektryka',
+    PLUMBING: 'Hydraulika',
+    HEATING: 'Ogrzewanie',
+    WALL: 'Ściany',
+    FLOOR: 'Podłoga',
+    DEVICE: 'Urządzenie',
+    NOTE: 'Notatka',
+    OTHER: 'Inne',
   };
 
 const categoryIcons:
-  Record<
-    EntryCategory,
-    string
-  > = {
+  Record<EntryCategory, string> = {
     ELECTRICAL: '⚡',
     PLUMBING: '💧',
     HEATING: '🔥',
@@ -142,30 +122,6 @@ const categoryIcons:
     NOTE: '📝',
     OTHER: '📌',
   };
-
-function formatFileSize(
-  bytes: number,
-) {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-
-  const kb =
-    bytes / 1024;
-
-  if (kb < 1024) {
-    return `${kb.toFixed(
-      1,
-    )} KB`;
-  }
-
-  const mb =
-    kb / 1024;
-
-  return `${mb.toFixed(
-    1,
-  )} MB`;
-}
 
 export default function EntryDetailsScreen() {
   const { id } =
@@ -190,20 +146,28 @@ export default function EntryDetailsScreen() {
     );
 
   const [
+    property,
+    setProperty,
+  ] =
+    useState<Property | null>(
+      null,
+    );
+
+  const [
     attachments,
     setAttachments,
   ] =
-    useState<
-      Attachment[]
-    >([]);
+    useState<Attachment[]>(
+      [],
+    );
 
   const [
     selectedAttachment,
     setSelectedAttachment,
   ] =
-    useState<
-      Attachment | null
-    >(null);
+    useState<Attachment | null>(
+      null,
+    );
 
   const [
     isLoading,
@@ -218,8 +182,8 @@ export default function EntryDetailsScreen() {
     useState(false);
 
   const [
-    isDeletingAttachment,
-    setIsDeletingAttachment,
+    isDeleting,
+    setIsDeleting,
   ] =
     useState(false);
 
@@ -233,30 +197,31 @@ export default function EntryDetailsScreen() {
     error,
     setError,
   ] =
-    useState<
-      string | null
-    >(null);
+    useState<string | null>(
+      null,
+    );
 
-  const showMessage =
-    (
-      message: string,
-    ) => {
-      if (
-        Platform.OS ===
-        'web'
-      ) {
-        window.alert(
-          message,
-        );
+  const images =
+    useMemo(
+      () =>
+        attachments.filter(
+          (attachment) =>
+            attachment.kind ===
+            'IMAGE',
+        ),
+      [attachments],
+    );
 
-        return;
-      }
-
-      Alert.alert(
-        'HomeVault',
-        message,
-      );
-    };
+  const documents =
+    useMemo(
+      () =>
+        attachments.filter(
+          (attachment) =>
+            attachment.kind ===
+            'DOCUMENT',
+        ),
+      [attachments],
+    );
 
   const loadData =
     useCallback(
@@ -286,7 +251,7 @@ export default function EntryDetailsScreen() {
               await entryResponse.text();
 
             throw new Error(
-              `Entry API ${entryResponse.status}: ${body}`,
+              `GET /entries/${id} zwróciło ${entryResponse.status}: ${body}`,
             );
           }
 
@@ -315,7 +280,7 @@ export default function EntryDetailsScreen() {
               await roomResponse.text();
 
             throw new Error(
-              `Room API ${roomResponse.status}: ${body}`,
+              `GET /rooms/${entryData.roomId} zwróciło ${roomResponse.status}: ${body}`,
             );
           }
 
@@ -326,7 +291,7 @@ export default function EntryDetailsScreen() {
               await attachmentsResponse.text();
 
             throw new Error(
-              `Attachments API ${attachmentsResponse.status}: ${body}`,
+              `GET attachments zwróciło ${attachmentsResponse.status}: ${body}`,
             );
           }
 
@@ -338,12 +303,32 @@ export default function EntryDetailsScreen() {
             Attachment[] =
             await attachmentsResponse.json();
 
+          let propertyData:
+            Property | null =
+            null;
+
+          const propertyResponse =
+            await apiFetch(
+              `/properties/${roomData.propertyId}`,
+            );
+
+          if (
+            propertyResponse.ok
+          ) {
+            propertyData =
+              await propertyResponse.json();
+          }
+
           setEntry(
             entryData,
           );
 
           setRoom(
             roomData,
+          );
+
+          setProperty(
+            propertyData,
           );
 
           setAttachments(
@@ -373,7 +358,493 @@ export default function EntryDetailsScreen() {
     }, [loadData]),
   );
 
-  const handleEditEntry =
+  const getAccessToken =
+    async () => {
+      const {
+        data: {
+          session,
+        },
+      } =
+        await supabase.auth
+          .getSession();
+
+      if (!session) {
+        throw new Error(
+          'Brak aktywnej sesji.',
+        );
+      }
+
+      return session.access_token;
+    };
+
+  const uploadNativeFile =
+    async (
+      uri: string,
+    ) => {
+      if (!id) {
+        return;
+      }
+
+      const accessToken =
+        await getAccessToken();
+
+      const file =
+        new File(
+          uri,
+        );
+
+      const formData =
+        new FormData();
+
+      formData.append(
+        'file',
+        file,
+      );
+
+      const response =
+        await expoFetch(
+          `${API_URL}/entries/${id}/attachments`,
+          {
+            method:
+              'POST',
+
+            headers: {
+              Authorization:
+                `Bearer ${accessToken}`,
+            },
+
+            body:
+              formData,
+          },
+        );
+
+      if (!response.ok) {
+        const body =
+          await response.text();
+
+        throw new Error(
+          `Upload zwrócił ${response.status}: ${body}`,
+        );
+      }
+
+      return response.json();
+    };
+
+  const uploadWebFile =
+    async (
+      file: globalThis.File,
+    ) => {
+      if (!id) {
+        return;
+      }
+
+      const formData =
+        new FormData();
+
+      formData.append(
+        'file',
+        file,
+        file.name,
+      );
+
+      const response =
+        await apiFetch(
+          `/entries/${id}/attachments`,
+          {
+            method:
+              'POST',
+
+            body:
+              formData,
+          },
+        );
+
+      if (!response.ok) {
+        const body =
+          await response.text();
+
+        throw new Error(
+          `Upload zwrócił ${response.status}: ${body}`,
+        );
+      }
+
+      return response.json();
+    };
+
+  const uploadImage =
+    async (
+      asset:
+        ImagePicker.ImagePickerAsset,
+    ) => {
+      if (
+        Platform.OS ===
+        'web'
+      ) {
+        if (!asset.file) {
+          throw new Error(
+            'Brak obiektu File dla wybranego zdjęcia.',
+          );
+        }
+
+        return uploadWebFile(
+          asset.file,
+        );
+      }
+
+      return uploadNativeFile(
+        asset.uri,
+      );
+    };
+
+  const handlePickImage =
+    async () => {
+      try {
+        const result =
+          await ImagePicker
+            .launchImageLibraryAsync({
+              mediaTypes: [
+                'images',
+              ],
+
+              allowsEditing:
+                false,
+
+              quality:
+                0.85,
+            });
+
+        if (
+          result.canceled ||
+          !result.assets.length
+        ) {
+          return;
+        }
+
+        setIsUploading(
+          true,
+        );
+
+        await uploadImage(
+          result.assets[0],
+        );
+
+        await loadData();
+      } catch (err) {
+        console.error(
+          'Błąd wyboru zdjęcia:',
+          err,
+        );
+
+        showMessage(
+          'Błąd',
+          'Nie udało się dodać zdjęcia.',
+        );
+      } finally {
+        setIsUploading(
+          false,
+        );
+      }
+    };
+
+  const handleTakePhoto =
+    async () => {
+      try {
+        if (
+          Platform.OS !==
+          'web'
+        ) {
+          const permission =
+            await ImagePicker
+              .requestCameraPermissionsAsync();
+
+          if (
+            !permission.granted
+          ) {
+            showMessage(
+              'Brak dostępu',
+              'HomeVault potrzebuje dostępu do aparatu.',
+            );
+
+            return;
+          }
+        }
+
+        const result =
+          await ImagePicker
+            .launchCameraAsync({
+              mediaTypes: [
+                'images',
+              ],
+
+              allowsEditing:
+                false,
+
+              quality:
+                0.85,
+            });
+
+        if (
+          result.canceled ||
+          !result.assets.length
+        ) {
+          return;
+        }
+
+        setIsUploading(
+          true,
+        );
+
+        await uploadImage(
+          result.assets[0],
+        );
+
+        await loadData();
+      } catch (err) {
+        console.error(
+          'Błąd aparatu:',
+          err,
+        );
+
+        showMessage(
+          'Błąd',
+          'Nie udało się dodać zdjęcia.',
+        );
+      } finally {
+        setIsUploading(
+          false,
+        );
+      }
+    };
+
+  const handlePickDocument =
+    async () => {
+      try {
+        const result =
+          await DocumentPicker
+            .getDocumentAsync({
+              type:
+                'application/pdf',
+
+              multiple:
+                false,
+
+              copyToCacheDirectory:
+                true,
+            });
+
+        if (
+          result.canceled ||
+          !result.assets.length
+        ) {
+          return;
+        }
+
+        const asset =
+          result.assets[0];
+
+        if (
+          asset.size &&
+          asset.size >
+            10 *
+              1024 *
+              1024
+        ) {
+          showMessage(
+            'Plik jest za duży',
+            'Maksymalny rozmiar dokumentu to 10 MB.',
+          );
+
+          return;
+        }
+
+        setIsUploading(
+          true,
+        );
+
+        if (
+          Platform.OS ===
+          'web'
+        ) {
+          if (
+            !asset.file
+          ) {
+            throw new Error(
+              'Brak obiektu File dla dokumentu.',
+            );
+          }
+
+          await uploadWebFile(
+            asset.file,
+          );
+        } else {
+          await uploadNativeFile(
+            asset.uri,
+          );
+        }
+
+        await loadData();
+      } catch (err) {
+        console.error(
+          'Błąd dodawania dokumentu:',
+          err,
+        );
+
+        showMessage(
+          'Błąd',
+          'Nie udało się dodać dokumentu PDF.',
+        );
+      } finally {
+        setIsUploading(
+          false,
+        );
+      }
+    };
+
+  const handleOpenDocument =
+    async (
+      attachment:
+        Attachment,
+    ) => {
+      try {
+        const supported =
+          await Linking
+            .canOpenURL(
+              attachment.url,
+            );
+
+        if (!supported) {
+          throw new Error(
+            'System nie może otworzyć tego dokumentu.',
+          );
+        }
+
+        await Linking.openURL(
+          attachment.url,
+        );
+      } catch (err) {
+        console.error(
+          'Błąd otwierania dokumentu:',
+          err,
+        );
+
+        showMessage(
+          'Błąd',
+          'Nie udało się otworzyć dokumentu.',
+        );
+      }
+    };
+
+  const deleteAttachment =
+    async (
+      attachment:
+        Attachment,
+    ) => {
+      try {
+        setIsDeleting(
+          true,
+        );
+
+        const response =
+          await apiFetch(
+            `/attachments/${attachment.id}`,
+            {
+              method:
+                'DELETE',
+            },
+          );
+
+        if (!response.ok) {
+          const body =
+            await response.text();
+
+          throw new Error(
+            `DELETE attachment zwróciło ${response.status}: ${body}`,
+          );
+        }
+
+        setSelectedAttachment(
+          null,
+        );
+
+        await loadData();
+      } catch (err) {
+        console.error(
+          'Błąd usuwania załącznika:',
+          err,
+        );
+
+        showMessage(
+          'Błąd',
+          'Nie udało się usunąć załącznika.',
+        );
+      } finally {
+        setIsDeleting(
+          false,
+        );
+      }
+    };
+
+  const confirmDeleteAttachment =
+    (
+      attachment:
+        Attachment,
+    ) => {
+      const label =
+        attachment.kind ===
+        'IMAGE'
+          ? 'zdjęcie'
+          : 'dokument';
+
+      if (
+        Platform.OS ===
+        'web'
+      ) {
+        const confirmed =
+          window.confirm(
+            `Usunąć ${label}?`,
+          );
+
+        if (confirmed) {
+          void deleteAttachment(
+            attachment,
+          );
+        }
+
+        return;
+      }
+
+      Alert.alert(
+        'Usuń załącznik',
+
+        `Czy na pewno chcesz usunąć ${label}?`,
+
+        [
+          {
+            text:
+              'Anuluj',
+
+            style:
+              'cancel',
+          },
+
+          {
+            text:
+              'Usuń',
+
+            style:
+              'destructive',
+
+            onPress:
+              () =>
+                void deleteAttachment(
+                  attachment,
+                ),
+          },
+        ],
+      );
+    };
+
+  const handleEdit =
     () => {
       if (!id) {
         return;
@@ -389,84 +860,12 @@ export default function EntryDetailsScreen() {
       });
     };
 
-  const askDeleteEntry =
-    async () => {
-      if (
-        Platform.OS ===
-        'web'
-      ) {
-        return window.confirm(
-          'Usunąć ten wpis wraz ze wszystkimi zdjęciami?',
-        );
-      }
-
-      return new Promise<boolean>(
-        (
-          resolve,
-        ) => {
-          Alert.alert(
-            'Usuń wpis',
-
-            'Usunięty zostanie również cały zestaw zdjęć przypisanych do wpisu.',
-
-            [
-              {
-                text:
-                  'Anuluj',
-
-                style:
-                  'cancel',
-
-                onPress:
-                  () =>
-                    resolve(
-                      false,
-                    ),
-              },
-
-              {
-                text:
-                  'Usuń',
-
-                style:
-                  'destructive',
-
-                onPress:
-                  () =>
-                    resolve(
-                      true,
-                    ),
-              },
-            ],
-
-            {
-              cancelable:
-                true,
-
-              onDismiss:
-                () =>
-                  resolve(
-                    false,
-                  ),
-            },
-          );
-        },
-      );
-    };
-
-  const handleDeleteEntry =
+  const deleteEntry =
     async () => {
       if (
         !id ||
-        !entry
+        !room
       ) {
-        return;
-      }
-
-      const confirmed =
-        await askDeleteEntry();
-
-      if (!confirmed) {
         return;
       }
 
@@ -489,7 +888,7 @@ export default function EntryDetailsScreen() {
             await response.text();
 
           throw new Error(
-            `DELETE ${response.status}: ${body}`,
+            `DELETE /entries/${id} zwróciło ${response.status}: ${body}`,
           );
         }
 
@@ -499,7 +898,9 @@ export default function EntryDetailsScreen() {
 
           params: {
             id:
-              entry.roomId.toString(),
+              String(
+                room.id,
+              ),
           },
         });
       } catch (err) {
@@ -509,6 +910,7 @@ export default function EntryDetailsScreen() {
         );
 
         showMessage(
+          'Błąd',
           'Nie udało się usunąć wpisu.',
         );
       } finally {
@@ -518,422 +920,62 @@ export default function EntryDetailsScreen() {
       }
     };
 
-  const uploadImage =
-    async (
-      asset:
-        ImagePicker.ImagePickerAsset,
-    ) => {
-      if (!id) {
-        return;
-      }
-
-      /*
-       * WEB
-       */
+  const handleDeleteEntry =
+    () => {
       if (
         Platform.OS ===
         'web'
       ) {
-        if (!asset.file) {
-          throw new Error(
-            'Brak obiektu File dla wybranego zdjęcia.',
+        const confirmed =
+          window.confirm(
+            'Czy na pewno chcesz usunąć ten wpis wraz ze wszystkimi załącznikami?',
           );
+
+        if (confirmed) {
+          void deleteEntry();
         }
 
-        const formData =
-          new FormData();
-
-        formData.append(
-          'file',
-
-          asset.file,
-
-          asset.fileName ??
-            asset.file.name ??
-            `photo-${Date.now()}.jpg`,
-        );
-
-        const response =
-          await apiFetch(
-            `/entries/${id}/attachments`,
-            {
-              method:
-                'POST',
-
-              body:
-                formData,
-            },
-          );
-
-        if (!response.ok) {
-          const body =
-            await response.text();
-
-          throw new Error(
-            `Upload ${response.status}: ${body}`,
-          );
-        }
-
-        return response.json();
+        return;
       }
 
-      /*
-       * ANDROID / IOS
-       *
-       * Zachowujemy działający
-       * wariant:
-       *
-       * expo-file-system File
-       * +
-       * expo/fetch
-       */
-      const {
-        data: {
-          session,
-        },
+      Alert.alert(
+        'Usuń wpis',
 
-        error:
-          sessionError,
-      } =
-        await supabase.auth
-          .getSession();
+        'Wpis i wszystkie jego załączniki zostaną trwale usunięte.',
 
-      if (sessionError) {
-        throw sessionError;
-      }
-
-      if (
-        !session
-          ?.access_token
-      ) {
-        throw new Error(
-          'Brak aktywnej sesji użytkownika.',
-        );
-      }
-
-      const file =
-        new File(
-          asset.uri,
-        );
-
-      const formData =
-        new FormData();
-
-      console.log(
-        'UPLOAD FILE',
-        {
-          uri:
-            file.uri,
-
-          name:
-            file.name,
-
-          type:
-            file.type,
-
-          size:
-            file.size,
-        },
-      );
-
-      formData.append(
-        'file',
-        file,
-      );
-
-      const response =
-        await expoFetch(
-          `${API_URL}/entries/${id}/attachments`,
+        [
           {
-            method:
-              'POST',
+            text:
+              'Anuluj',
 
-            headers: {
-              Authorization:
-                `Bearer ${session.access_token}`,
-            },
-
-            body:
-              formData,
+            style:
+              'cancel',
           },
-        );
 
-      console.log(
-        'UPLOAD RESPONSE:',
-        response.status,
-      );
+          {
+            text:
+              'Usuń',
 
-      if (!response.ok) {
-        const body =
-          await response.text();
+            style:
+              'destructive',
 
-        throw new Error(
-          `Upload ${response.status}: ${body}`,
-        );
-      }
-
-      return response.json();
-    };
-
-  const uploadPickedAsset =
-    async (
-      asset:
-        ImagePicker.ImagePickerAsset,
-    ) => {
-      try {
-        setIsUploading(
-          true,
-        );
-
-        await uploadImage(
-          asset,
-        );
-
-        await loadData();
-      } catch (err) {
-        console.error(
-          'Błąd wysyłania zdjęcia:',
-          err,
-        );
-
-        showMessage(
-          'Nie udało się wysłać zdjęcia.',
-        );
-      } finally {
-        setIsUploading(
-          false,
-        );
-      }
-    };
-
-  const handlePickImage =
-    async () => {
-      try {
-        const result =
-          await ImagePicker
-            .launchImageLibraryAsync(
-              {
-                mediaTypes: [
-                  'images',
-                ],
-
-                allowsEditing:
-                  false,
-
-                quality:
-                  0.85,
-              },
-            );
-
-        if (
-          result.canceled ||
-          !result.assets
-            .length
-        ) {
-          return;
-        }
-
-        await uploadPickedAsset(
-          result.assets[0],
-        );
-      } catch (err) {
-        console.error(
-          'Błąd wyboru zdjęcia:',
-          err,
-        );
-
-        showMessage(
-          'Nie udało się wybrać zdjęcia.',
-        );
-      }
-    };
-
-  const handleTakePhoto =
-    async () => {
-      try {
-        if (
-          Platform.OS !==
-          'web'
-        ) {
-          const permission =
-            await ImagePicker
-              .requestCameraPermissionsAsync();
-
-          if (
-            !permission.granted
-          ) {
-            Alert.alert(
-              'Brak dostępu do aparatu',
-
-              'HomeVault potrzebuje dostępu do aparatu, aby wykonać zdjęcie.',
-            );
-
-            return;
-          }
-        }
-
-        const result =
-          await ImagePicker
-            .launchCameraAsync(
-              {
-                mediaTypes: [
-                  'images',
-                ],
-
-                allowsEditing:
-                  false,
-
-                quality:
-                  0.85,
-              },
-            );
-
-        if (
-          result.canceled ||
-          !result.assets
-            .length
-        ) {
-          return;
-        }
-
-        await uploadPickedAsset(
-          result.assets[0],
-        );
-      } catch (err) {
-        console.error(
-          'Błąd aparatu:',
-          err,
-        );
-
-        showMessage(
-          'Nie udało się wykonać zdjęcia.',
-        );
-      }
-    };
-
-  const askDeleteAttachment =
-    async () => {
-      if (
-        Platform.OS ===
-        'web'
-      ) {
-        return window.confirm(
-          'Czy na pewno chcesz usunąć to zdjęcie?',
-        );
-      }
-
-      return new Promise<boolean>(
-        (
-          resolve,
-        ) => {
-          Alert.alert(
-            'Usuń zdjęcie',
-
-            'Czy na pewno chcesz usunąć to zdjęcie?',
-
-            [
-              {
-                text:
-                  'Anuluj',
-
-                style:
-                  'cancel',
-
-                onPress:
-                  () =>
-                    resolve(
-                      false,
-                    ),
-              },
-
-              {
-                text:
-                  'Usuń',
-
-                style:
-                  'destructive',
-
-                onPress:
-                  () =>
-                    resolve(
-                      true,
-                    ),
-              },
-            ],
-
-            {
-              cancelable:
-                true,
-
-              onDismiss:
-                () =>
-                  resolve(
-                    false,
-                  ),
-            },
-          );
-        },
+            onPress:
+              () =>
+                void deleteEntry(),
+          },
+        ],
       );
     };
 
-  const handleDeleteAttachment =
-    async () => {
-      if (
-        !selectedAttachment
-      ) {
-        return;
-      }
-
-      const confirmed =
-        await askDeleteAttachment();
-
-      if (!confirmed) {
-        return;
-      }
-
-      try {
-        setIsDeletingAttachment(
-          true,
-        );
-
-        const response =
-          await apiFetch(
-            `/attachments/${selectedAttachment.id}`,
-            {
-              method:
-                'DELETE',
-            },
-          );
-
-        if (!response.ok) {
-          const body =
-            await response.text();
-
-          throw new Error(
-            `DELETE ${response.status}: ${body}`,
-          );
-        }
-
-        setSelectedAttachment(
-          null,
-        );
-
-        await loadData();
-      } catch (err) {
-        console.error(
-          'Błąd usuwania zdjęcia:',
-          err,
-        );
-
-        showMessage(
-          'Nie udało się usunąć zdjęcia.',
-        );
-      } finally {
-        setIsDeletingAttachment(
-          false,
-        );
-      }
-    };
+  const headerTitle =
+    entry
+      ? property &&
+        room
+        ? `${property.name} › ${room.name} › ${entry.title}`
+        : room
+          ? `${room.name} › ${entry.title}`
+          : entry.title
+      : 'Wpis';
 
   if (isLoading) {
     return (
@@ -941,7 +983,7 @@ export default function EntryDetailsScreen() {
         <Stack.Screen
           options={{
             title:
-              'Wpis',
+              headerTitle,
           }}
         />
 
@@ -962,7 +1004,7 @@ export default function EntryDetailsScreen() {
 
             <Text
               style={
-                styles.infoText
+                styles.loadingText
               }
             >
               Pobieranie wpisu...
@@ -975,7 +1017,8 @@ export default function EntryDetailsScreen() {
 
   if (
     error ||
-    !entry
+    !entry ||
+    !room
   ) {
     return (
       <>
@@ -1002,52 +1045,29 @@ export default function EntryDetailsScreen() {
                 styles.errorTitle
               }
             >
-              Wystąpił błąd
+              Nie udało się otworzyć wpisu
             </Text>
 
             <Text
               style={
-                styles.infoText
+                styles.errorText
               }
             >
-              {error}
+              {error ??
+                'Brak danych wpisu.'}
             </Text>
-
-            <Pressable
-              style={
-                styles.retryButton
-              }
-              onPress={
-                loadData
-              }
-            >
-              <Text
-                style={
-                  styles.retryButtonText
-                }
-              >
-                Spróbuj ponownie
-              </Text>
-            </Pressable>
           </View>
         </SafeAreaView>
       </>
     );
   }
 
-  const breadcrumbTitle =
-    room?.property?.name
-      ? `${room.property.name} › ${room.name} › ${entry.title}`
-      : room
-        ? `${room.name} › ${entry.title}`
-        : entry.title;
-
   return (
     <>
       <Stack.Screen
         options={{
           title:
-            breadcrumbTitle,
+            headerTitle,
         }}
       />
 
@@ -1064,12 +1084,12 @@ export default function EntryDetailsScreen() {
         >
           <View
             style={
-              styles.categoryRow
+              styles.headerCard
             }
           >
             <View
               style={
-                styles.categoryIconBox
+                styles.categoryIconContainer
               }
             >
               <Text
@@ -1077,86 +1097,71 @@ export default function EntryDetailsScreen() {
                   styles.categoryIcon
                 }
               >
-                {
-                  categoryIcons[
-                    entry.category
-                  ]
-                }
+                {categoryIcons[
+                  entry.category
+                ]}
               </Text>
             </View>
 
             <View
               style={
-                styles.categoryContent
+                styles.headerContent
               }
             >
               <Text
                 style={
-                  styles.categoryLabel
+                  styles.category
                 }
               >
-                {
-                  categoryLabels[
-                    entry.category
-                  ]
-                }
+                {categoryLabels[
+                  entry.category
+                ]}
               </Text>
 
-              {room && (
+              <Text
+                style={
+                  styles.title
+                }
+              >
+                {entry.title}
+              </Text>
+
+              {!!entry.description && (
                 <Text
                   style={
-                    styles.roomName
+                    styles.description
                   }
                 >
-                  🚪{' '}
-                  {room.name}
+                  {entry.description}
                 </Text>
               )}
             </View>
           </View>
 
-          <Text
-            style={
-              styles.title
-            }
-          >
-            {entry.title}
-          </Text>
-
-          {entry.description && (
-            <Text
-              style={
-                styles.description
-              }
-            >
-              {
-                entry.description
-              }
-            </Text>
-          )}
-
           <View
             style={
-              styles.entryActions
+              styles.actionsRow
             }
           >
             <Pressable
-              disabled={
-                isDeletingEntry
-              }
               onPress={
-                handleEditEntry
+                handleEdit
               }
-              style={
-                styles.editButton
-              }
+              style={({
+                pressed,
+              }) => [
+                styles.secondaryButton,
+
+                pressed &&
+                  styles.pressed,
+              ]}
             >
               <Text
                 style={
-                  styles.editButtonText
+                  styles.secondaryButtonText
                 }
               >
-                ✏️ Edytuj
+                Edytuj
               </Text>
             </Pressable>
 
@@ -1167,62 +1172,68 @@ export default function EntryDetailsScreen() {
               onPress={
                 handleDeleteEntry
               }
-              style={
-                styles.deleteEntryButton
-              }
+              style={({
+                pressed,
+              }) => [
+                styles.deleteEntryButton,
+
+                pressed &&
+                  styles.pressed,
+              ]}
             >
-              <Text
-                style={
-                  styles.deleteEntryButtonText
-                }
-              >
-                {isDeletingEntry
-                  ? 'Usuwanie...'
-                  : '🗑 Usuń'}
-              </Text>
+              {isDeletingEntry ? (
+                <ActivityIndicator
+                  size="small"
+                />
+              ) : (
+                <Text
+                  style={
+                    styles.deleteEntryButtonText
+                  }
+                >
+                  Usuń wpis
+                </Text>
+              )}
             </Pressable>
           </View>
 
           <View
             style={
-              styles.divider
-            }
-          />
-
-          <View
-            style={
-              styles.sectionHeader
+              styles.section
             }
           >
-            <View>
-              <Text
-                style={
-                  styles.sectionTitle
-                }
-              >
-                Zdjęcia
-              </Text>
+            <View
+              style={
+                styles.sectionHeader
+              }
+            >
+              <View>
+                <Text
+                  style={
+                    styles.sectionTitle
+                  }
+                >
+                  Zdjęcia
+                </Text>
 
-              <Text
-                style={
-                  styles.sectionSubtitle
-                }
-              >
-                {attachments.length ===
-                1
-                  ? '1 zdjęcie'
-                  : `${attachments.length} zdjęć`}
-              </Text>
+                <Text
+                  style={
+                    styles.sectionSubtitle
+                  }
+                >
+                  {images.length ===
+                  1
+                    ? '1 zdjęcie'
+                    : `${images.length} zdjęć`}
+                </Text>
+              </View>
             </View>
-          </View>
 
-          <View
-            style={
-              styles.photoActions
-            }
-          >
-            {Platform.OS !==
-              'web' && (
+            <View
+              style={
+                styles.uploadButtons
+              }
+            >
               <Pressable
                 disabled={
                   isUploading
@@ -1233,7 +1244,7 @@ export default function EntryDetailsScreen() {
                 style={({
                   pressed,
                 }) => [
-                  styles.cameraButton,
+                  styles.uploadButton,
 
                   pressed &&
                     styles.pressed,
@@ -1244,174 +1255,365 @@ export default function EntryDetailsScreen() {
               >
                 <Text
                   style={
-                    styles.cameraButtonText
+                    styles.uploadButtonIcon
                   }
                 >
-                  📷 Zrób zdjęcie
+                  📷
+                </Text>
+
+                <Text
+                  style={
+                    styles.uploadButtonText
+                  }
+                >
+                  Zrób zdjęcie
                 </Text>
               </Pressable>
-            )}
 
-            <Pressable
-              disabled={
-                isUploading
-              }
-              onPress={
-                handlePickImage
-              }
-              style={({
-                pressed,
-              }) => [
-                styles.galleryButton,
+              <Pressable
+                disabled={
+                  isUploading
+                }
+                onPress={
+                  handlePickImage
+                }
+                style={({
+                  pressed,
+                }) => [
+                  styles.uploadButton,
 
-                pressed &&
-                  styles.pressed,
+                  pressed &&
+                    styles.pressed,
 
-                isUploading &&
-                  styles.disabled,
-              ]}
-            >
-              <Text
+                  isUploading &&
+                    styles.disabled,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.uploadButtonIcon
+                  }
+                >
+                  🖼️
+                </Text>
+
+                <Text
+                  style={
+                    styles.uploadButtonText
+                  }
+                >
+                  Galeria
+                </Text>
+              </Pressable>
+            </View>
+
+            {images.length >
+            0 ? (
+              <View
                 style={
-                  styles.galleryButtonText
+                  styles.imageGrid
                 }
               >
-                🖼️ Wybierz z galerii
-              </Text>
-            </Pressable>
+                {images.map(
+                  (
+                    attachment,
+                  ) => (
+                    <Pressable
+                      key={
+                        attachment.id
+                      }
+                      onPress={() =>
+                        setSelectedAttachment(
+                          attachment,
+                        )
+                      }
+                      style={({
+                        pressed,
+                      }) => [
+                        styles.imageCard,
+
+                        pressed &&
+                          styles.pressed,
+                      ]}
+                    >
+                      <Image
+                        source={{
+                          uri:
+                            attachment.url,
+                        }}
+                        style={
+                          styles.image
+                        }
+                      />
+                    </Pressable>
+                  ),
+                )}
+              </View>
+            ) : (
+              <View
+                style={
+                  styles.emptyBox
+                }
+              >
+                <Text
+                  style={
+                    styles.emptyIcon
+                  }
+                >
+                  📷
+                </Text>
+
+                <Text
+                  style={
+                    styles.emptyTitle
+                  }
+                >
+                  Brak zdjęć
+                </Text>
+
+                <Text
+                  style={
+                    styles.emptyText
+                  }
+                >
+                  Dodaj zdjęcie z aparatu lub galerii.
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <View
+            style={
+              styles.section
+            }
+          >
+            <View
+              style={
+                styles.sectionHeader
+              }
+            >
+              <View>
+                <Text
+                  style={
+                    styles.sectionTitle
+                  }
+                >
+                  Dokumenty
+                </Text>
+
+                <Text
+                  style={
+                    styles.sectionSubtitle
+                  }
+                >
+                  {documents.length ===
+                  1
+                    ? '1 dokument'
+                    : `${documents.length} dokumentów`}
+                </Text>
+              </View>
+
+              <Pressable
+                disabled={
+                  isUploading
+                }
+                onPress={
+                  handlePickDocument
+                }
+                style={({
+                  pressed,
+                }) => [
+                  styles.addDocumentButton,
+
+                  pressed &&
+                    styles.pressed,
+
+                  isUploading &&
+                    styles.disabled,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.addDocumentButtonText
+                  }
+                >
+                  + PDF
+                </Text>
+              </Pressable>
+            </View>
+
+            {documents.length >
+            0 ? (
+              <View
+                style={
+                  styles.documentsList
+                }
+              >
+                {documents.map(
+                  (
+                    attachment,
+                  ) => (
+                    <View
+                      key={
+                        attachment.id
+                      }
+                      style={
+                        styles.documentCard
+                      }
+                    >
+                      <Pressable
+                        onPress={() =>
+                          void handleOpenDocument(
+                            attachment,
+                          )
+                        }
+                        style={({
+                          pressed,
+                        }) => [
+                          styles.documentMain,
+
+                          pressed &&
+                            styles.pressed,
+                        ]}
+                      >
+                        <View
+                          style={
+                            styles.documentIcon
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.documentIconText
+                            }
+                          >
+                            📄
+                          </Text>
+                        </View>
+
+                        <View
+                          style={
+                            styles.documentContent
+                          }
+                        >
+                          <Text
+                            numberOfLines={
+                              2
+                            }
+                            style={
+                              styles.documentName
+                            }
+                          >
+                            {
+                              attachment.fileName
+                            }
+                          </Text>
+
+                          <Text
+                            style={
+                              styles.documentMeta
+                            }
+                          >
+                            {formatFileSize(
+                              attachment.size,
+                            )}
+                            {' · PDF'}
+                          </Text>
+                        </View>
+
+                        <Text
+                          style={
+                            styles.arrow
+                          }
+                        >
+                          ›
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        disabled={
+                          isDeleting
+                        }
+                        onPress={() =>
+                          confirmDeleteAttachment(
+                            attachment,
+                          )
+                        }
+                        style={({
+                          pressed,
+                        }) => [
+                          styles.documentDeleteButton,
+
+                          pressed &&
+                            styles.pressed,
+                        ]}
+                      >
+                        <Text
+                          style={
+                            styles.documentDeleteText
+                          }
+                        >
+                          Usuń
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ),
+                )}
+              </View>
+            ) : (
+              <View
+                style={
+                  styles.emptyBox
+                }
+              >
+                <Text
+                  style={
+                    styles.emptyIcon
+                  }
+                >
+                  📄
+                </Text>
+
+                <Text
+                  style={
+                    styles.emptyTitle
+                  }
+                >
+                  Brak dokumentów
+                </Text>
+
+                <Text
+                  style={
+                    styles.emptyText
+                  }
+                >
+                  Dodaj instrukcję, fakturę lub inny dokument PDF.
+                </Text>
+              </View>
+            )}
           </View>
 
           {isUploading && (
             <View
               style={
-                styles.uploadStatus
+                styles.uploadingBox
               }
             >
               <ActivityIndicator />
 
               <Text
                 style={
-                  styles.uploadStatusText
+                  styles.uploadingText
                 }
               >
-                Wysyłanie zdjęcia...
+                Wysyłanie pliku...
               </Text>
-            </View>
-          )}
-
-          {attachments.length ===
-          0 ? (
-            <View
-              style={
-                styles.emptyState
-              }
-            >
-              <Text
-                style={
-                  styles.emptyIcon
-                }
-              >
-                📷
-              </Text>
-
-              <Text
-                style={
-                  styles.emptyTitle
-                }
-              >
-                Brak zdjęć
-              </Text>
-
-              <Text
-                style={
-                  styles.infoText
-                }
-              >
-                Zrób zdjęcie instalacji,
-                urządzenia albo
-                wykonanych prac lub
-                wybierz istniejące
-                zdjęcie.
-              </Text>
-            </View>
-          ) : (
-            <View
-              style={
-                styles.gallery
-              }
-            >
-              {attachments.map(
-                (
-                  attachment,
-                ) => (
-                  <Pressable
-                    key={
-                      attachment.id
-                    }
-                    onPress={() =>
-                      setSelectedAttachment(
-                        attachment,
-                      )
-                    }
-                    style={({
-                      pressed,
-                    }) => [
-                      styles.imageCard,
-
-                      pressed &&
-                        styles.pressed,
-                    ]}
-                  >
-                    <Image
-                      source={{
-                        uri:
-                          attachment.url,
-                      }}
-                      style={
-                        styles.image
-                      }
-                      resizeMode="cover"
-                    />
-
-                    <View
-                      style={
-                        styles.imageInfo
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.fileName
-                        }
-                        numberOfLines={
-                          1
-                        }
-                      >
-                        {
-                          attachment.fileName
-                        }
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.fileSize
-                        }
-                      >
-                        {formatFileSize(
-                          attachment.size,
-                        )}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ),
-              )}
             </View>
           )}
         </ScrollView>
 
         <Modal
           visible={
-            selectedAttachment !==
-            null
+            !!selectedAttachment
           }
           transparent
           animationType="fade"
@@ -1426,48 +1628,16 @@ export default function EntryDetailsScreen() {
               styles.modalBackdrop
             }
           >
-            <View
+            <SafeAreaView
               style={
                 styles.modalContainer
               }
             >
               <View
                 style={
-                  styles.modalHeader
+                  styles.modalToolbar
                 }
               >
-                <View
-                  style={
-                    styles.modalHeaderText
-                  }
-                >
-                  <Text
-                    style={
-                      styles.modalFileName
-                    }
-                    numberOfLines={
-                      1
-                    }
-                  >
-                    {
-                      selectedAttachment
-                        ?.fileName
-                    }
-                  </Text>
-
-                  {selectedAttachment && (
-                    <Text
-                      style={
-                        styles.modalFileSize
-                      }
-                    >
-                      {formatFileSize(
-                        selectedAttachment.size,
-                      )}
-                    </Text>
-                  )}
-                </View>
-
                 <Pressable
                   onPress={() =>
                     setSelectedAttachment(
@@ -1475,16 +1645,49 @@ export default function EntryDetailsScreen() {
                     )
                   }
                   style={
-                    styles.closeButton
+                    styles.modalToolbarButton
                   }
                 >
                   <Text
                     style={
-                      styles.closeButtonText
+                      styles.modalToolbarButtonText
                     }
                   >
-                    ✕
+                    Zamknij
                   </Text>
+                </Pressable>
+
+                <Pressable
+                  disabled={
+                    !selectedAttachment ||
+                    isDeleting
+                  }
+                  onPress={() => {
+                    if (
+                      selectedAttachment
+                    ) {
+                      confirmDeleteAttachment(
+                        selectedAttachment,
+                      );
+                    }
+                  }}
+                  style={
+                    styles.modalToolbarButton
+                  }
+                >
+                  {isDeleting ? (
+                    <ActivityIndicator
+                      color="#FFFFFF"
+                    />
+                  ) : (
+                    <Text
+                      style={
+                        styles.modalDeleteText
+                      }
+                    >
+                      Usuń
+                    </Text>
+                  )}
                 </Pressable>
               </View>
 
@@ -1494,74 +1697,79 @@ export default function EntryDetailsScreen() {
                     uri:
                       selectedAttachment.url,
                   }}
-                  style={
-                    styles.fullImage
-                  }
                   resizeMode="contain"
+                  style={
+                    styles.modalImage
+                  }
                 />
               )}
-
-              <View
-                style={
-                  styles.modalActions
-                }
-              >
-                <Pressable
-                  disabled={
-                    isDeletingAttachment
-                  }
-                  onPress={() =>
-                    setSelectedAttachment(
-                      null,
-                    )
-                  }
-                  style={
-                    styles.modalCancelButton
-                  }
-                >
-                  <Text
-                    style={
-                      styles.modalCancelButtonText
-                    }
-                  >
-                    Zamknij
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  disabled={
-                    isDeletingAttachment
-                  }
-                  onPress={
-                    handleDeleteAttachment
-                  }
-                  style={[
-                    styles.modalDeleteButton,
-
-                    isDeletingAttachment &&
-                      styles.disabled,
-                  ]}
-                >
-                  {isDeletingAttachment ? (
-                    <ActivityIndicator
-                      color="#FFFFFF"
-                    />
-                  ) : (
-                    <Text
-                      style={
-                        styles.modalDeleteButtonText
-                      }
-                    >
-                      🗑 Usuń zdjęcie
-                    </Text>
-                  )}
-                </Pressable>
-              </View>
-            </View>
+            </SafeAreaView>
           </View>
         </Modal>
       </SafeAreaView>
     </>
+  );
+}
+
+function formatFileSize(
+  bytes: number,
+) {
+  if (
+    !Number.isFinite(
+      bytes,
+    ) ||
+    bytes <= 0
+  ) {
+    return '0 KB';
+  }
+
+  if (
+    bytes <
+    1024
+  ) {
+    return `${bytes} B`;
+  }
+
+  const kilobytes =
+    bytes /
+    1024;
+
+  if (
+    kilobytes <
+    1024
+  ) {
+    return `${kilobytes.toFixed(
+      1,
+    )} KB`;
+  }
+
+  const megabytes =
+    kilobytes /
+    1024;
+
+  return `${megabytes.toFixed(
+    1,
+  )} MB`;
+}
+
+function showMessage(
+  title: string,
+  message: string,
+) {
+  if (
+    Platform.OS ===
+    'web'
+  ) {
+    window.alert(
+      `${title}\n\n${message}`,
+    );
+
+    return;
+  }
+
+  Alert.alert(
+    title,
+    message,
   );
 }
 
@@ -1575,7 +1783,7 @@ const styles =
 
     content: {
       padding: 24,
-      paddingBottom: 60,
+      paddingBottom: 70,
     },
 
     center: {
@@ -1587,97 +1795,125 @@ const styles =
       padding: 24,
     },
 
-    categoryRow: {
-      flexDirection:
-        'row',
-      alignItems:
+    loadingText: {
+      marginTop: 12,
+      color: '#6B7280',
+    },
+
+    errorTitle: {
+      fontSize: 20,
+      fontWeight:
+        '700',
+      color: '#B91C1C',
+      textAlign:
         'center',
     },
 
-    categoryIconBox: {
+    errorText: {
+      marginTop: 8,
+      color: '#6B7280',
+      textAlign:
+        'center',
+    },
+
+    headerCard: {
+      padding: 20,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor:
+        '#E5E7EB',
+      backgroundColor:
+        '#FFFFFF',
+      flexDirection:
+        'row',
+    },
+
+    categoryIconContainer: {
       width: 58,
       height: 58,
       borderRadius: 16,
       backgroundColor:
-        '#FFFFFF',
-      borderWidth: 1,
-      borderColor:
-        '#E5E7EB',
-      alignItems:
-        'center',
+        '#F3F4F6',
       justifyContent:
+        'center',
+      alignItems:
         'center',
     },
 
     categoryIcon: {
-      fontSize: 29,
+      fontSize: 30,
     },
 
-    categoryContent: {
+    headerContent: {
       flex: 1,
-      marginLeft: 14,
+      marginLeft: 16,
     },
 
-    categoryLabel: {
-      fontSize: 14,
-      fontWeight:
-        '600',
+    category: {
       color: '#6B7280',
+      fontSize: 13,
+      fontWeight:
+        '700',
       textTransform:
         'uppercase',
     },
 
-    roomName: {
-      marginTop: 4,
-      fontSize: 14,
-      color: '#9CA3AF',
-    },
-
     title: {
-      marginTop: 22,
-      fontSize: 30,
+      marginTop: 5,
+      color: '#111827',
+      fontSize: 24,
       fontWeight:
         '700',
-      color: '#111827',
     },
 
     description: {
-      marginTop: 10,
-      fontSize: 16,
-      lineHeight: 24,
-      color: '#6B7280',
+      marginTop: 8,
+      color: '#4B5563',
+      fontSize: 15,
+      lineHeight: 22,
     },
 
-    entryActions: {
-      marginTop: 22,
+    actionsRow: {
       flexDirection:
         'row',
       gap: 12,
+      marginTop: 16,
     },
 
-    editButton: {
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderRadius: 10,
+    secondaryButton: {
+      flex: 1,
+      minHeight: 48,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor:
         '#D1D5DB',
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
       backgroundColor:
         '#FFFFFF',
     },
 
-    editButtonText: {
+    secondaryButtonText: {
       color: '#111827',
       fontWeight:
         '600',
     },
 
     deleteEntryButton: {
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderRadius: 10,
+      flex: 1,
+      minHeight: 48,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor:
+        '#FCA5A5',
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
       backgroundColor:
-        '#FEE2E2',
+        '#FEF2F2',
     },
 
     deleteEntryButtonText: {
@@ -1686,14 +1922,12 @@ const styles =
         '600',
     },
 
-    divider: {
-      marginVertical: 30,
-      height: 1,
-      backgroundColor:
-        '#E5E7EB',
+    section: {
+      marginTop: 30,
     },
 
     sectionHeader: {
+      marginBottom: 14,
       flexDirection:
         'row',
       justifyContent:
@@ -1703,213 +1937,235 @@ const styles =
     },
 
     sectionTitle: {
-      fontSize: 22,
+      fontSize: 20,
       fontWeight:
         '700',
       color: '#111827',
     },
 
     sectionSubtitle: {
-      marginTop: 4,
+      marginTop: 3,
       fontSize: 13,
-      color: '#9CA3AF',
+      color: '#6B7280',
     },
 
-    photoActions: {
-      marginTop: 18,
+    uploadButtons: {
       flexDirection:
         'row',
-      flexWrap:
-        'wrap',
       gap: 12,
+      marginBottom: 16,
     },
 
-    cameraButton: {
-      minHeight: 46,
-      paddingHorizontal: 18,
-      paddingVertical: 13,
-      borderRadius: 11,
-      backgroundColor:
-        '#111827',
-      justifyContent:
-        'center',
-      alignItems:
-        'center',
-    },
-
-    cameraButtonText: {
-      color: '#FFFFFF',
-      fontSize: 14,
-      fontWeight:
-        '600',
-    },
-
-    galleryButton: {
-      minHeight: 46,
-      paddingHorizontal: 18,
-      paddingVertical: 13,
-      borderRadius: 11,
-      backgroundColor:
-        '#FFFFFF',
+    uploadButton: {
+      flex: 1,
+      minHeight: 56,
+      paddingHorizontal: 12,
+      borderRadius: 13,
       borderWidth: 1,
       borderColor:
         '#D1D5DB',
-      justifyContent:
-        'center',
-      alignItems:
-        'center',
-    },
-
-    galleryButtonText: {
-      color: '#111827',
-      fontSize: 14,
-      fontWeight:
-        '600',
-    },
-
-    uploadStatus: {
-      marginTop: 16,
+      backgroundColor:
+        '#FFFFFF',
       flexDirection:
         'row',
+      gap: 8,
       alignItems:
         'center',
-      gap: 10,
-    },
-
-    uploadStatusText: {
-      color: '#6B7280',
-      fontSize: 14,
-    },
-
-    emptyState: {
-      minHeight: 300,
       justifyContent:
         'center',
-      alignItems:
-        'center',
     },
 
-    emptyIcon: {
-      fontSize: 54,
+    uploadButtonIcon: {
+      fontSize: 20,
     },
 
-    emptyTitle: {
-      marginTop: 14,
-      fontSize: 19,
+    uploadButtonText: {
+      color: '#111827',
+      fontSize: 14,
       fontWeight:
         '600',
-      color: '#111827',
     },
 
-    infoText: {
-      marginTop: 8,
-      maxWidth: 350,
-      textAlign:
-        'center',
-      color: '#6B7280',
-      lineHeight: 21,
-    },
-
-    gallery: {
-      marginTop: 22,
+    imageGrid: {
       flexDirection:
         'row',
       flexWrap:
         'wrap',
-      gap: 16,
+      gap: 10,
     },
 
     imageCard: {
-      width: 240,
-      borderRadius: 16,
+      width: '31%',
+      aspectRatio: 1,
       overflow:
         'hidden',
+      borderRadius: 12,
       backgroundColor:
-        '#FFFFFF',
-      borderWidth: 1,
-      borderColor:
         '#E5E7EB',
     },
 
     image: {
       width: '100%',
-      height: 180,
-      backgroundColor:
+      height: '100%',
+    },
+
+    emptyBox: {
+      padding: 24,
+      alignItems:
+        'center',
+      borderWidth: 1,
+      borderColor:
         '#E5E7EB',
+      borderRadius: 16,
+      backgroundColor:
+        '#FFFFFF',
     },
 
-    imageInfo: {
-      padding: 11,
+    emptyIcon: {
+      fontSize: 34,
     },
 
-    fileName: {
-      fontSize: 13,
+    emptyTitle: {
+      marginTop: 10,
+      fontSize: 16,
       fontWeight:
-        '500',
-      color: '#374151',
+        '600',
+      color: '#111827',
     },
 
-    fileSize: {
-      marginTop: 3,
-      fontSize: 11,
-      color: '#9CA3AF',
+    emptyText: {
+      marginTop: 5,
+      textAlign:
+        'center',
+      color: '#6B7280',
+      lineHeight: 20,
     },
 
-    errorTitle: {
-      fontSize: 21,
-      fontWeight:
-        '700',
-      color: '#B91C1C',
-    },
-
-    retryButton: {
-      marginTop: 22,
-      paddingHorizontal: 22,
-      paddingVertical: 14,
-      borderRadius: 12,
+    addDocumentButton: {
+      paddingHorizontal: 15,
+      paddingVertical: 10,
+      borderRadius: 10,
       backgroundColor:
         '#111827',
     },
 
-    retryButtonText: {
+    addDocumentButtonText: {
       color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight:
+        '700',
+    },
+
+    documentsList: {
+      gap: 10,
+    },
+
+    documentCard: {
+      overflow:
+        'hidden',
+      borderWidth: 1,
+      borderColor:
+        '#E5E7EB',
+      borderRadius: 14,
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    documentMain: {
+      minHeight: 76,
+      padding: 14,
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+    },
+
+    documentIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 12,
+      backgroundColor:
+        '#F3F4F6',
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
+    },
+
+    documentIconText: {
+      fontSize: 24,
+    },
+
+    documentContent: {
+      flex: 1,
+      marginLeft: 13,
+    },
+
+    documentName: {
+      color: '#111827',
+      fontSize: 15,
+      lineHeight: 20,
       fontWeight:
         '600',
     },
 
-    pressed: {
-      opacity: 0.7,
+    documentMeta: {
+      marginTop: 4,
+      color: '#6B7280',
+      fontSize: 12,
     },
 
-    disabled: {
-      opacity: 0.55,
+    documentDeleteButton: {
+      paddingVertical: 10,
+      alignItems:
+        'center',
+      borderTopWidth: 1,
+      borderTopColor:
+        '#F3F4F6',
+    },
+
+    documentDeleteText: {
+      color: '#B91C1C',
+      fontSize: 13,
+      fontWeight:
+        '600',
+    },
+
+    arrow: {
+      marginLeft: 10,
+      color: '#9CA3AF',
+      fontSize: 28,
+    },
+
+    uploadingBox: {
+      marginTop: 22,
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+      gap: 10,
+    },
+
+    uploadingText: {
+      color: '#6B7280',
+      fontSize: 14,
     },
 
     modalBackdrop: {
       flex: 1,
       backgroundColor:
-        'rgba(0, 0, 0, 0.85)',
-      justifyContent:
-        'center',
-      alignItems:
-        'center',
-      padding: 24,
+        'rgba(0, 0, 0, 0.96)',
     },
 
     modalContainer: {
-      width: '100%',
-      maxWidth: 1000,
-      maxHeight: '95%',
-      backgroundColor:
-        '#111827',
-      borderRadius: 18,
-      overflow:
-        'hidden',
+      flex: 1,
     },
 
-    modalHeader: {
-      minHeight: 68,
-      paddingHorizontal: 20,
+    modalToolbar: {
+      minHeight: 60,
+      paddingHorizontal: 18,
       flexDirection:
         'row',
       alignItems:
@@ -1918,93 +2174,39 @@ const styles =
         'space-between',
     },
 
-    modalHeaderText: {
-      flex: 1,
-      marginRight: 20,
+    modalToolbarButton: {
+      minWidth: 70,
+      minHeight: 44,
+      justifyContent:
+        'center',
     },
 
-    modalFileName: {
+    modalToolbarButtonText: {
       color: '#FFFFFF',
       fontSize: 15,
       fontWeight:
         '600',
     },
 
-    modalFileSize: {
-      marginTop: 4,
-      color: '#9CA3AF',
-      fontSize: 12,
-    },
-
-    closeButton: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
-      backgroundColor:
-        '#374151',
-      alignItems:
-        'center',
-      justifyContent:
-        'center',
-    },
-
-    closeButtonText: {
-      color: '#FFFFFF',
-      fontSize: 19,
+    modalDeleteText: {
+      color: '#FCA5A5',
+      fontSize: 15,
       fontWeight:
         '700',
+      textAlign:
+        'right',
     },
 
-    fullImage: {
+    modalImage: {
+      flex: 1,
       width: '100%',
-      height: 560,
-      backgroundColor:
-        '#000000',
     },
 
-    modalActions: {
-      padding: 18,
-      flexDirection:
-        'row',
-      justifyContent:
-        'flex-end',
-      gap: 12,
+    pressed: {
+      opacity: 0.7,
     },
 
-    modalCancelButton: {
-      minHeight: 46,
-      paddingHorizontal: 20,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor:
-        '#4B5563',
-      justifyContent:
-        'center',
-      alignItems:
-        'center',
-    },
-
-    modalCancelButtonText: {
-      color: '#FFFFFF',
-      fontWeight:
-        '600',
-    },
-
-    modalDeleteButton: {
-      minHeight: 46,
-      paddingHorizontal: 20,
-      borderRadius: 10,
-      backgroundColor:
-        '#DC2626',
-      justifyContent:
-        'center',
-      alignItems:
-        'center',
-    },
-
-    modalDeleteButtonText: {
-      color: '#FFFFFF',
-      fontWeight:
-        '600',
+    disabled: {
+      opacity: 0.5,
     },
   });
