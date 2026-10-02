@@ -1,5 +1,9 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+
+import {
+  useEffect,
+  useState,
+} from 'react';
 
 import {
   ActivityIndicator,
@@ -16,7 +20,13 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
-import { supabase } from '../lib/supabase';
+import {
+  apiFetch,
+} from '../lib/api';
+
+import {
+  supabase,
+} from '../lib/supabase';
 
 export default function AccountScreen() {
   const [email, setEmail] =
@@ -31,13 +41,19 @@ export default function AccountScreen() {
   const [isSigningOut, setIsSigningOut] =
     useState(false);
 
+  const [
+    isDeletingAccount,
+    setIsDeletingAccount,
+  ] = useState(false);
+
   useEffect(() => {
     const loadUser = async () => {
       try {
         const {
           data: { user },
           error,
-        } = await supabase.auth.getUser();
+        } =
+          await supabase.auth.getUser();
 
         if (error) {
           throw error;
@@ -132,14 +148,182 @@ export default function AccountScreen() {
         },
         {
           text: 'Wyloguj',
-          style:
-            'destructive',
+          style: 'destructive',
           onPress:
             performSignOut,
         },
       ],
     );
   };
+
+  const performDeleteAccount =
+    async () => {
+      try {
+        setIsDeletingAccount(
+          true,
+        );
+
+        const response =
+          await apiFetch(
+            '/auth/account',
+            {
+              method: 'DELETE',
+            },
+          );
+
+        if (!response.ok) {
+          let message =
+            `Nie udało się usunąć konta. Status: ${response.status}.`;
+
+          try {
+            const body =
+              await response.json();
+
+            if (
+              typeof body?.message ===
+              'string'
+            ) {
+              message =
+                body.message;
+            } else if (
+              Array.isArray(
+                body?.message,
+              )
+            ) {
+              message =
+                body.message.join(
+                  '\n',
+                );
+            }
+          } catch {
+            // Brak body JSON.
+          }
+
+          throw new Error(
+            message,
+          );
+        }
+
+        /*
+         * Konto zostało już usunięte
+         * po stronie backendu/Supabase.
+         *
+         * Czyścimy wyłącznie lokalną
+         * sesję na urządzeniu.
+         */
+        const {
+          error:
+            signOutError,
+        } =
+          await supabase.auth
+            .signOut({
+              scope: 'local',
+            });
+
+        if (signOutError) {
+          console.warn(
+            'Konto usunięte, ale wystąpił problem podczas czyszczenia lokalnej sesji:',
+            signOutError,
+          );
+        }
+
+        router.replace(
+          '/login',
+        );
+      } catch (error) {
+        console.error(
+          'Błąd usuwania konta:',
+          error,
+        );
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Nie udało się usunąć konta.';
+
+        showMessage(
+          'Nie udało się usunąć konta',
+          message,
+        );
+      } finally {
+        setIsDeletingAccount(
+          false,
+        );
+      }
+    };
+
+  const showFinalDeleteConfirmation =
+    () => {
+      if (
+        Platform.OS === 'web'
+      ) {
+        const confirmed =
+          window.confirm(
+            'OSTATECZNE POTWIERDZENIE\n\nUsunięcie konta jest nieodwracalne. Wszystkie dane HomeVault przypisane do tego konta zostaną usunięte.\n\nCzy na pewno kontynuować?',
+          );
+
+        if (confirmed) {
+          performDeleteAccount();
+        }
+
+        return;
+      }
+
+      Alert.alert(
+        'Ostateczne potwierdzenie',
+        'Usunięcie konta jest nieodwracalne. Wszystkie dane HomeVault przypisane do tego konta zostaną usunięte.',
+        [
+          {
+            text: 'Anuluj',
+            style: 'cancel',
+          },
+          {
+            text:
+              'Usuń konto',
+            style:
+              'destructive',
+            onPress:
+              performDeleteAccount,
+          },
+        ],
+      );
+    };
+
+  const handleDeleteAccount =
+    () => {
+      if (
+        Platform.OS === 'web'
+      ) {
+        const confirmed =
+          window.confirm(
+            'Czy chcesz usunąć konto HomeVault wraz ze wszystkimi swoimi danymi?',
+          );
+
+        if (confirmed) {
+          showFinalDeleteConfirmation();
+        }
+
+        return;
+      }
+
+      Alert.alert(
+        'Usuń konto',
+        'Czy chcesz usunąć konto HomeVault wraz ze wszystkimi swoimi danymi?',
+        [
+          {
+            text: 'Anuluj',
+            style: 'cancel',
+          },
+          {
+            text: 'Dalej',
+            style:
+              'destructive',
+            onPress:
+              showFinalDeleteConfirmation,
+          },
+        ],
+      );
+    };
 
   if (isLoading) {
     return (
@@ -169,6 +353,10 @@ export default function AccountScreen() {
     );
   }
 
+  const isBusy =
+    isSigningOut ||
+    isDeletingAccount;
+
   return (
     <SafeAreaView
       style={
@@ -186,6 +374,7 @@ export default function AccountScreen() {
           }
         >
           <Pressable
+            disabled={isBusy}
             onPress={() =>
               router.back()
             }
@@ -196,6 +385,9 @@ export default function AccountScreen() {
 
               pressed &&
                 styles.pressed,
+
+              isBusy &&
+                styles.disabled,
             ]}
           >
             <Text
@@ -367,9 +559,7 @@ export default function AccountScreen() {
           }
         >
           <Pressable
-            disabled={
-              isSigningOut
-            }
+            disabled={isBusy}
             onPress={
               handleSignOut
             }
@@ -380,6 +570,9 @@ export default function AccountScreen() {
 
               pressed &&
                 styles.pressed,
+
+              isBusy &&
+                styles.disabled,
             ]}
           >
             <View
@@ -434,10 +627,22 @@ export default function AccountScreen() {
             styles.card
           }
         >
-          <View
-            style={
-              styles.row
+          <Pressable
+            disabled={isBusy}
+            onPress={
+              handleDeleteAccount
             }
+            style={({
+              pressed,
+            }) => [
+              styles.actionRow,
+
+              pressed &&
+                styles.pressed,
+
+              isBusy &&
+                styles.disabled,
+            ]}
           >
             <View
               style={
@@ -446,7 +651,7 @@ export default function AccountScreen() {
             >
               <Text
                 style={
-                  styles.rowTitle
+                  styles.deleteTitle
                 }
               >
                 Usuń konto
@@ -457,21 +662,27 @@ export default function AccountScreen() {
                   styles.rowDescription
                 }
               >
-                Usuwanie konta
-                i wszystkich danych
-                dodamy w kolejnym
-                kroku.
+                Usuń konto oraz
+                wszystkie przypisane
+                do niego dane
+                HomeVault.
               </Text>
             </View>
 
-            <Text
-              style={
-                styles.disabledLabel
-              }
-            >
-              Wkrótce
-            </Text>
-          </View>
+            {isDeletingAccount ? (
+              <ActivityIndicator
+                size="small"
+              />
+            ) : (
+              <Text
+                style={
+                  styles.deleteArrow
+                }
+              >
+                ›
+              </Text>
+            )}
+          </Pressable>
         </View>
 
         <Text
@@ -703,6 +914,12 @@ const styles =
       color: '#111827',
     },
 
+    deleteTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#B91C1C',
+    },
+
     rowDescription: {
       marginTop: 4,
       fontSize: 13,
@@ -723,11 +940,10 @@ const styles =
       color: '#9CA3AF',
     },
 
-    disabledLabel: {
+    deleteArrow: {
       marginLeft: 12,
-      fontSize: 12,
-      fontWeight: '600',
-      color: '#9CA3AF',
+      fontSize: 30,
+      color: '#B91C1C',
     },
 
     footer: {
@@ -739,5 +955,9 @@ const styles =
 
     pressed: {
       opacity: 0.65,
+    },
+
+    disabled: {
+      opacity: 0.5,
     },
   });

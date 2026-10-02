@@ -4,12 +4,22 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import { PrismaService } from '../prisma/prisma.service';
+import {
+  PrismaService,
+} from '../prisma/prisma.service';
+
+import {
+  StorageService,
+} from '../storage/storage.service';
 
 import type {
   CreateEntryDto,
   EntryCategory,
 } from './dto/create-entry.dto';
+
+import type {
+  UpdateEntryDto,
+} from './dto/update-entry.dto';
 
 const ENTRY_CATEGORIES: EntryCategory[] = [
   'ELECTRICAL',
@@ -25,7 +35,11 @@ const ENTRY_CATEGORIES: EntryCategory[] = [
 @Injectable()
 export class EntriesService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly prisma:
+      PrismaService,
+
+    private readonly storage:
+      StorageService,
   ) {}
 
   async findByRoom(
@@ -144,15 +158,158 @@ export class EntriesService {
 
     return this.prisma.entry.create({
       data: {
-        title: dto.title.trim(),
+        title:
+          dto.title.trim(),
 
         description:
           dto.description?.trim() ||
           undefined,
 
-        category: dto.category,
+        category:
+          dto.category,
+
         roomId,
       },
     });
+  }
+
+  async update(
+    id: number,
+    dto: UpdateEntryDto,
+    ownerId: string,
+  ) {
+    const entry =
+      await this.prisma.entry.findFirst({
+        where: {
+          id,
+
+          room: {
+            property: {
+              ownerId,
+            },
+          },
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (!entry) {
+      throw new NotFoundException(
+        'Entry not found',
+      );
+    }
+
+    if (
+      dto.title !== undefined &&
+      !dto.title.trim()
+    ) {
+      throw new BadRequestException(
+        'Entry title cannot be empty',
+      );
+    }
+
+    if (
+      dto.category !== undefined &&
+      !ENTRY_CATEGORIES.includes(
+        dto.category,
+      )
+    ) {
+      throw new BadRequestException(
+        'Invalid entry category',
+      );
+    }
+
+    return this.prisma.entry.update({
+      where: {
+        id,
+      },
+
+      data: {
+        ...(dto.title !== undefined
+          ? {
+              title:
+                dto.title.trim(),
+            }
+          : {}),
+
+        ...(dto.description !==
+        undefined
+          ? {
+              description:
+                dto.description
+                  ?.trim() ||
+                null,
+            }
+          : {}),
+
+        ...(dto.category !== undefined
+          ? {
+              category:
+                dto.category,
+            }
+          : {}),
+      },
+    });
+  }
+
+  async remove(
+    id: number,
+    ownerId: string,
+  ) {
+    const entry =
+      await this.prisma.entry.findFirst({
+        where: {
+          id,
+
+          room: {
+            property: {
+              ownerId,
+            },
+          },
+        },
+
+        include: {
+          attachments: {
+            select: {
+              storagePath: true,
+            },
+          },
+        },
+      });
+
+    if (!entry) {
+      throw new NotFoundException(
+        'Entry not found',
+      );
+    }
+
+    const storagePaths =
+      entry.attachments.map(
+        (
+          attachment,
+        ) =>
+          attachment.storagePath,
+      );
+
+    if (
+      storagePaths.length > 0
+    ) {
+      await this.storage.removeMany(
+        storagePaths,
+      );
+    }
+
+    await this.prisma.entry.delete({
+      where: {
+        id,
+      },
+    });
+
+    return {
+      success: true,
+      id,
+    };
   }
 }

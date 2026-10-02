@@ -1,15 +1,27 @@
-import { Module } from '@nestjs/common';
+import {
+  Module,
+} from '@nestjs/common';
 
-import { AuthModule } from '../auth/auth.module';
-import { PrismaModule } from '../prisma/prisma.module';
+import {
+  EntriesController,
+} from './entries.controller';
 
-import { EntriesController } from './entries.controller';
-import { EntriesService } from './entries.service';
+import {
+  EntriesService,
+} from './entries.service';
+
+import {
+  PrismaModule,
+} from '../prisma/prisma.module';
+
+import {
+  StorageModule,
+} from '../storage/storage.module';
 
 @Module({
   imports: [
     PrismaModule,
-    AuthModule,
+    StorageModule,
   ],
 
   controllers: [

@@ -1,33 +1,50 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
 
-import { SupabaseAuthGuard } from '../auth/auth.guard';
+import {
+  SupabaseAuthGuard,
+} from '../auth/auth.guard';
 
 import type {
   AuthenticatedRequest,
 } from '../auth/auth.guard';
 
-import { CreateRoomDto } from './dto/create-room.dto';
-import { RoomsService } from './rooms.service';
+import {
+  CreateRoomDto,
+} from './dto/create-room.dto';
+
+import {
+  UpdateRoomDto,
+} from './dto/update-room.dto';
+
+import {
+  RoomsService,
+} from './rooms.service';
 
 @Controller()
 @UseGuards(SupabaseAuthGuard)
 export class RoomsController {
   constructor(
-    private readonly roomsService: RoomsService,
+    private readonly roomsService:
+      RoomsService,
   ) {}
 
   @Get('properties/:propertyId/rooms')
   findByProperty(
-    @Param('propertyId', ParseIntPipe)
+    @Param(
+      'propertyId',
+      ParseIntPipe,
+    )
     propertyId: number,
 
     @Req()
@@ -41,7 +58,10 @@ export class RoomsController {
 
   @Post('properties/:propertyId/rooms')
   create(
-    @Param('propertyId', ParseIntPipe)
+    @Param(
+      'propertyId',
+      ParseIntPipe,
+    )
     propertyId: number,
 
     @Body()
@@ -59,13 +79,54 @@ export class RoomsController {
 
   @Get('rooms/:id')
   findOne(
-    @Param('id', ParseIntPipe)
+    @Param(
+      'id',
+      ParseIntPipe,
+    )
     id: number,
 
     @Req()
     request: AuthenticatedRequest,
   ) {
     return this.roomsService.findOne(
+      id,
+      request.user.id,
+    );
+  }
+
+  @Patch('rooms/:id')
+  update(
+    @Param(
+      'id',
+      ParseIntPipe,
+    )
+    id: number,
+
+    @Body()
+    dto: UpdateRoomDto,
+
+    @Req()
+    request: AuthenticatedRequest,
+  ) {
+    return this.roomsService.update(
+      id,
+      dto,
+      request.user.id,
+    );
+  }
+
+  @Delete('rooms/:id')
+  remove(
+    @Param(
+      'id',
+      ParseIntPipe,
+    )
+    id: number,
+
+    @Req()
+    request: AuthenticatedRequest,
+  ) {
+    return this.roomsService.remove(
       id,
       request.user.id,
     );
