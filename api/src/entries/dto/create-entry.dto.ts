@@ -10,6 +10,10 @@ export type EntryCategory =
 
 export class CreateEntryDto {
   title!: string;
+
   description?: string;
+
   category!: EntryCategory;
+
+  tags?: string[];
 }

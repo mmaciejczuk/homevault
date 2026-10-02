@@ -7,6 +7,7 @@ import {
 
 import {
   useCallback,
+  useMemo,
   useState,
 } from 'react';
 
@@ -58,48 +59,77 @@ interface Entry {
   title: string;
   description?: string;
   category: EntryCategory;
+  tags: string[];
   roomId: number;
   createdAt: string;
   updatedAt: string;
 }
 
 const categoryLabels:
-  Record<
-    EntryCategory,
-    string
-  > = {
+  Record<EntryCategory, string> = {
     ELECTRICAL:
       'Elektryka',
+
     PLUMBING:
       'Hydraulika',
+
     HEATING:
       'Ogrzewanie',
+
     WALL:
       'Ściany',
+
     FLOOR:
       'Podłoga',
+
     DEVICE:
       'Urządzenie',
+
     NOTE:
       'Notatka',
+
     OTHER:
       'Inne',
   };
 
 const categoryIcons:
-  Record<
-    EntryCategory,
-    string
-  > = {
-    ELECTRICAL: '⚡',
-    PLUMBING: '💧',
-    HEATING: '🔥',
-    WALL: '🧱',
-    FLOOR: '🪵',
-    DEVICE: '🔧',
-    NOTE: '📝',
-    OTHER: '📌',
+  Record<EntryCategory, string> = {
+    ELECTRICAL:
+      '⚡',
+
+    PLUMBING:
+      '💧',
+
+    HEATING:
+      '🔥',
+
+    WALL:
+      '🧱',
+
+    FLOOR:
+      '🪵',
+
+    DEVICE:
+      '🔧',
+
+    NOTE:
+      '📝',
+
+    OTHER:
+      '📌',
   };
+
+const categories:
+  EntryCategory[] = [
+    'ELECTRICAL',
+    'PLUMBING',
+    'HEATING',
+    'WALL',
+    'FLOOR',
+    'DEVICE',
+    'NOTE',
+    'OTHER',
+  ];
 
 export default function RoomDetailsScreen() {
   const { id } =
@@ -120,6 +150,22 @@ export default function RoomDetailsScreen() {
     setEntries,
   ] =
     useState<Entry[]>([]);
+
+  const [
+    selectedCategory,
+    setSelectedCategory,
+  ] =
+    useState<
+      EntryCategory | null
+    >(null);
+
+  const [
+    selectedTag,
+    setSelectedTag,
+  ] =
+    useState<
+      string | null
+    >(null);
 
   const [
     isLoading,
@@ -200,7 +246,15 @@ export default function RoomDetailsScreen() {
           );
 
           setEntries(
-            entriesData,
+            entriesData.map(
+              (entry) => ({
+                ...entry,
+
+                tags:
+                  entry.tags ??
+                  [],
+              }),
+            ),
           );
         } catch (err) {
           console.error(
@@ -225,6 +279,69 @@ export default function RoomDetailsScreen() {
       void loadData();
     }, [loadData]),
   );
+
+  const availableTags =
+    useMemo(() => {
+      const tags =
+        entries.flatMap(
+          (entry) =>
+            entry.tags ??
+            [],
+        );
+
+      return [
+        ...new Set(
+          tags,
+        ),
+      ].sort(
+        (
+          first,
+          second,
+        ) =>
+          first.localeCompare(
+            second,
+            'pl',
+          ),
+      );
+    }, [entries]);
+
+  const filteredEntries =
+    useMemo(
+      () =>
+        entries.filter(
+          (entry) => {
+            if (
+              selectedCategory &&
+              entry.category !==
+                selectedCategory
+            ) {
+              return false;
+            }
+
+            if (
+              selectedTag &&
+              !entry.tags.includes(
+                selectedTag,
+              )
+            ) {
+              return false;
+            }
+
+            return true;
+          },
+        ),
+      [
+        entries,
+        selectedCategory,
+        selectedTag,
+      ],
+    );
+
+  const hasActiveFilters =
+    selectedCategory !==
+      null ||
+    selectedTag !==
+      null;
 
   const handleAddEntry =
     () => {
@@ -265,6 +382,17 @@ export default function RoomDetailsScreen() {
       });
     };
 
+  const clearFilters =
+    () => {
+      setSelectedCategory(
+        null,
+      );
+
+      setSelectedTag(
+        null,
+      );
+    };
+
   const handleDeleteRoom =
     async () => {
       if (!id) {
@@ -272,9 +400,10 @@ export default function RoomDetailsScreen() {
       }
 
       const confirmed =
-        Platform.OS === 'web'
+        Platform.OS ===
+        'web'
           ? window.confirm(
-              'Usunąć pomieszczenie wraz ze wszystkimi wpisami i zdjęciami?',
+              'Usunąć pomieszczenie wraz ze wszystkimi wpisami i załącznikami?',
             )
           : await new Promise<boolean>(
               (
@@ -283,7 +412,7 @@ export default function RoomDetailsScreen() {
                 Alert.alert(
                   'Usuń pomieszczenie',
 
-                  'Usunięte zostaną również wszystkie wpisy i zdjęcia.',
+                  'Usunięte zostaną również wszystkie wpisy i załączniki.',
 
                   [
                     {
@@ -500,7 +629,9 @@ export default function RoomDetailsScreen() {
         style={
           styles.container
         }
-        edges={['bottom']}
+        edges={[
+          'bottom',
+        ]}
       >
         <ScrollView
           contentContainerStyle={
@@ -539,7 +670,9 @@ export default function RoomDetailsScreen() {
                 styles.roomDescription
               }
             >
-              {room.description}
+              {
+                room.description
+              }
             </Text>
           )}
 
@@ -593,13 +726,28 @@ export default function RoomDetailsScreen() {
               styles.headerRow
             }
           >
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              Dokumentacja
-            </Text>
+            <View>
+              <Text
+                style={
+                  styles.sectionTitle
+                }
+              >
+                Dokumentacja
+              </Text>
+
+              {entries.length >
+                0 && (
+                <Text
+                  style={
+                    styles.resultsCount
+                  }
+                >
+                  {hasActiveFilters
+                    ? `${filteredEntries.length} z ${entries.length}`
+                    : `${entries.length} wpisów`}
+                </Text>
+              )}
+            </View>
 
             {entries.length >
               0 && (
@@ -621,6 +769,213 @@ export default function RoomDetailsScreen() {
               </Pressable>
             )}
           </View>
+
+          {entries.length >
+            0 && (
+            <View
+              style={
+                styles.filtersSection
+              }
+            >
+              <View
+                style={
+                  styles.filterHeader
+                }
+              >
+                <Text
+                  style={
+                    styles.filterTitle
+                  }
+                >
+                  Kategorie
+                </Text>
+
+                {hasActiveFilters && (
+                  <Pressable
+                    onPress={
+                      clearFilters
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.clearFiltersText
+                      }
+                    >
+                      Wyczyść
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={
+                  false
+                }
+                contentContainerStyle={
+                  styles.chipsRow
+                }
+              >
+                <Pressable
+                  onPress={() =>
+                    setSelectedCategory(
+                      null,
+                    )
+                  }
+                  style={[
+                    styles.filterChip,
+
+                    selectedCategory ===
+                      null &&
+                      styles.filterChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+
+                      selectedCategory ===
+                        null &&
+                        styles.filterChipTextActive,
+                    ]}
+                  >
+                    Wszystkie
+                  </Text>
+                </Pressable>
+
+                {categories.map(
+                  (
+                    category,
+                  ) => (
+                    <Pressable
+                      key={
+                        category
+                      }
+                      onPress={() =>
+                        setSelectedCategory(
+                          category,
+                        )
+                      }
+                      style={[
+                        styles.filterChip,
+
+                        selectedCategory ===
+                          category &&
+                          styles.filterChipActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+
+                          selectedCategory ===
+                            category &&
+                            styles.filterChipTextActive,
+                        ]}
+                      >
+                        {
+                          categoryIcons[
+                            category
+                          ]
+                        }{' '}
+                        {
+                          categoryLabels[
+                            category
+                          ]
+                        }
+                      </Text>
+                    </Pressable>
+                  ),
+                )}
+              </ScrollView>
+
+              {availableTags.length >
+                0 && (
+                <>
+                  <Text
+                    style={
+                      styles.tagFilterTitle
+                    }
+                  >
+                    Tagi
+                  </Text>
+
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={
+                      false
+                    }
+                    contentContainerStyle={
+                      styles.chipsRow
+                    }
+                  >
+                    <Pressable
+                      onPress={() =>
+                        setSelectedTag(
+                          null,
+                        )
+                      }
+                      style={[
+                        styles.tagChip,
+
+                        selectedTag ===
+                          null &&
+                          styles.tagChipActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.tagChipText,
+
+                          selectedTag ===
+                            null &&
+                            styles.tagChipTextActive,
+                        ]}
+                      >
+                        Wszystkie
+                      </Text>
+                    </Pressable>
+
+                    {availableTags.map(
+                      (
+                        tag,
+                      ) => (
+                        <Pressable
+                          key={
+                            tag
+                          }
+                          onPress={() =>
+                            setSelectedTag(
+                              tag,
+                            )
+                          }
+                          style={[
+                            styles.tagChip,
+
+                            selectedTag ===
+                              tag &&
+                              styles.tagChipActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.tagChipText,
+
+                              selectedTag ===
+                                tag &&
+                                styles.tagChipTextActive,
+                            ]}
+                          >
+                            #{tag}
+                          </Text>
+                        </Pressable>
+                      ),
+                    )}
+                  </ScrollView>
+                </>
+              )}
+            </View>
+          )}
 
           {entries.length ===
           0 ? (
@@ -650,11 +1005,7 @@ export default function RoomDetailsScreen() {
                   styles.infoText
                 }
               >
-                Dodaj pierwszy
-                wpis dotyczący
-                instalacji,
-                urządzenia lub
-                wykonanych prac.
+                Dodaj pierwszy wpis dotyczący instalacji, urządzenia lub wykonanych prac.
               </Text>
 
               <Pressable
@@ -674,13 +1025,61 @@ export default function RoomDetailsScreen() {
                 </Text>
               </Pressable>
             </View>
+          ) : filteredEntries.length ===
+            0 ? (
+            <View
+              style={
+                styles.filteredEmptyState
+              }
+            >
+              <Text
+                style={
+                  styles.emptyIcon
+                }
+              >
+                🔎
+              </Text>
+
+              <Text
+                style={
+                  styles.emptyTitle
+                }
+              >
+                Brak pasujących wpisów
+              </Text>
+
+              <Text
+                style={
+                  styles.infoText
+                }
+              >
+                Zmień kategorię lub tag albo wyczyść filtry.
+              </Text>
+
+              <Pressable
+                onPress={
+                  clearFilters
+                }
+                style={
+                  styles.button
+                }
+              >
+                <Text
+                  style={
+                    styles.buttonText
+                  }
+                >
+                  Wyczyść filtry
+                </Text>
+              </Pressable>
+            </View>
           ) : (
             <View
               style={
                 styles.entriesList
               }
             >
-              {entries.map(
+              {filteredEntries.map(
                 (
                   entry,
                 ) => (
@@ -688,9 +1087,14 @@ export default function RoomDetailsScreen() {
                     key={
                       entry.id
                     }
-                    style={
-                      styles.entryCard
-                    }
+                    style={({
+                      pressed,
+                    }) => [
+                      styles.entryCard,
+
+                      pressed &&
+                        styles.pressed,
+                    ]}
                     onPress={() =>
                       handleOpenEntry(
                         entry.id,
@@ -709,8 +1113,7 @@ export default function RoomDetailsScreen() {
                       >
                         {
                           categoryIcons[
-                            entry
-                              .category
+                            entry.category
                           ]
                         }
                       </Text>
@@ -728,8 +1131,7 @@ export default function RoomDetailsScreen() {
                       >
                         {
                           categoryLabels[
-                            entry
-                              .category
+                            entry.category
                           ]
                         }
                       </Text>
@@ -757,6 +1159,58 @@ export default function RoomDetailsScreen() {
                             entry.description
                           }
                         </Text>
+                      )}
+
+                      {entry.tags.length >
+                        0 && (
+                        <View
+                          style={
+                            styles.entryTags
+                          }
+                        >
+                          {entry.tags
+                            .slice(
+                              0,
+                              4,
+                            )
+                            .map(
+                              (
+                                tag,
+                              ) => (
+                                <View
+                                  key={
+                                    tag
+                                  }
+                                  style={
+                                    styles.entryTag
+                                  }
+                                >
+                                  <Text
+                                    style={
+                                      styles.entryTagText
+                                    }
+                                  >
+                                    #{tag}
+                                  </Text>
+                                </View>
+                              ),
+                            )}
+
+                          {entry.tags.length >
+                            4 && (
+                            <Text
+                              style={
+                                styles.moreTagsText
+                              }
+                            >
+                              +
+                              {entry
+                                .tags
+                                .length -
+                                4}
+                            </Text>
+                          )}
+                        </View>
                       )}
                     </View>
 
@@ -880,8 +1334,134 @@ const styles =
       color: '#111827',
     },
 
+    resultsCount: {
+      marginTop: 4,
+      color: '#6B7280',
+      fontSize: 13,
+    },
+
+    filtersSection: {
+      marginTop: 18,
+    },
+
+    filterHeader: {
+      flexDirection:
+        'row',
+      justifyContent:
+        'space-between',
+      alignItems:
+        'center',
+      marginBottom: 10,
+    },
+
+    filterTitle: {
+      fontSize: 13,
+      fontWeight:
+        '700',
+      color: '#6B7280',
+      textTransform:
+        'uppercase',
+    },
+
+    clearFiltersText: {
+      fontSize: 13,
+      fontWeight:
+        '600',
+      color: '#2563EB',
+    },
+
+    tagFilterTitle: {
+      marginTop: 15,
+      marginBottom: 10,
+      fontSize: 13,
+      fontWeight:
+        '700',
+      color: '#6B7280',
+      textTransform:
+        'uppercase',
+    },
+
+    chipsRow: {
+      gap: 8,
+      paddingRight: 20,
+    },
+
+    filterChip: {
+      minHeight: 36,
+      paddingHorizontal: 13,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor:
+        '#D1D5DB',
+      backgroundColor:
+        '#FFFFFF',
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
+
+    filterChipActive: {
+      backgroundColor:
+        '#111827',
+      borderColor:
+        '#111827',
+    },
+
+    filterChipText: {
+      color: '#374151',
+      fontSize: 13,
+      fontWeight:
+        '600',
+    },
+
+    filterChipTextActive: {
+      color: '#FFFFFF',
+    },
+
+    tagChip: {
+      minHeight: 34,
+      paddingHorizontal: 13,
+      borderRadius: 17,
+      borderWidth: 1,
+      borderColor:
+        '#BFDBFE',
+      backgroundColor:
+        '#EFF6FF',
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
+
+    tagChipActive: {
+      backgroundColor:
+        '#2563EB',
+      borderColor:
+        '#2563EB',
+    },
+
+    tagChipText: {
+      color: '#1D4ED8',
+      fontSize: 13,
+      fontWeight:
+        '600',
+    },
+
+    tagChipTextActive: {
+      color: '#FFFFFF',
+    },
+
     emptyState: {
       minHeight: 380,
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
+    },
+
+    filteredEmptyState: {
+      minHeight: 280,
       justifyContent:
         'center',
       alignItems:
@@ -1009,9 +1589,46 @@ const styles =
       lineHeight: 19,
     },
 
+    entryTags: {
+      marginTop: 9,
+      flexDirection:
+        'row',
+      flexWrap:
+        'wrap',
+      gap: 6,
+      alignItems:
+        'center',
+    },
+
+    entryTag: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 8,
+      backgroundColor:
+        '#EFF6FF',
+    },
+
+    entryTagText: {
+      color: '#1D4ED8',
+      fontSize: 11,
+      fontWeight:
+        '600',
+    },
+
+    moreTagsText: {
+      color: '#6B7280',
+      fontSize: 11,
+      fontWeight:
+        '600',
+    },
+
     arrow: {
       marginLeft: 12,
       fontSize: 30,
       color: '#9CA3AF',
+    },
+
+    pressed: {
+      opacity: 0.7,
     },
   });

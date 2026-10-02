@@ -4,6 +4,14 @@ import type {
 
 export class UpdateEntryDto {
   title?: string;
-  description?: string | null;
-  category?: EntryCategory;
+
+  description?:
+    | string
+    | null;
+
+  category?:
+    EntryCategory;
+
+  tags?:
+    string[];
 }

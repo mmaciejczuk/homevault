@@ -6,6 +6,7 @@ import {
 
 import {
   useEffect,
+  useMemo,
   useState,
 } from 'react';
 
@@ -39,6 +40,12 @@ type EntryCategory =
   | 'NOTE'
   | 'OTHER';
 
+interface CategoryOption {
+  value: EntryCategory;
+  label: string;
+  icon: string;
+}
+
 interface Property {
   id: number;
   name: string;
@@ -48,14 +55,7 @@ interface Room {
   id: number;
   name: string;
   propertyId: number;
-
   property?: Property;
-}
-
-interface CategoryOption {
-  value: EntryCategory;
-  label: string;
-  icon: string;
 }
 
 const categories:
@@ -68,7 +68,6 @@ const categories:
       icon:
         '⚡',
     },
-
     {
       value:
         'PLUMBING',
@@ -77,7 +76,6 @@ const categories:
       icon:
         '💧',
     },
-
     {
       value:
         'HEATING',
@@ -86,7 +84,6 @@ const categories:
       icon:
         '🔥',
     },
-
     {
       value:
         'WALL',
@@ -95,7 +92,6 @@ const categories:
       icon:
         '🧱',
     },
-
     {
       value:
         'FLOOR',
@@ -104,7 +100,6 @@ const categories:
       icon:
         '🪵',
     },
-
     {
       value:
         'DEVICE',
@@ -113,7 +108,6 @@ const categories:
       icon:
         '🔧',
     },
-
     {
       value:
         'NOTE',
@@ -122,7 +116,6 @@ const categories:
       icon:
         '📝',
     },
-
     {
       value:
         'OTHER',
@@ -132,6 +125,26 @@ const categories:
         '📌',
     },
   ];
+
+function parseTags(
+  value: string,
+) {
+  return [
+    ...new Set(
+      value
+        .split(',')
+        .map(
+          (tag) =>
+            tag
+              .trim()
+              .toLowerCase(),
+        )
+        .filter(
+          Boolean,
+        ),
+    ),
+  ];
+}
 
 export default function CreateEntryScreen() {
   const { id } =
@@ -168,6 +181,12 @@ export default function CreateEntryScreen() {
     );
 
   const [
+    tagsText,
+    setTagsText,
+  ] =
+    useState('');
+
+  const [
     isLoading,
     setIsLoading,
   ] =
@@ -187,25 +206,36 @@ export default function CreateEntryScreen() {
       string | null
     >(null);
 
-  const showMessage = (
-    titleText: string,
-    message: string,
-  ) => {
-    if (
-      Platform.OS === 'web'
-    ) {
-      window.alert(
-        `${titleText}\n\n${message}`,
-      );
-
-      return;
-    }
-
-    Alert.alert(
-      titleText,
-      message,
+  const tags =
+    useMemo(
+      () =>
+        parseTags(
+          tagsText,
+        ),
+      [tagsText],
     );
-  };
+
+  const showMessage =
+    (
+      titleText: string,
+      message: string,
+    ) => {
+      if (
+        Platform.OS ===
+        'web'
+      ) {
+        window.alert(
+          `${titleText}\n\n${message}`,
+        );
+
+        return;
+      }
+
+      Alert.alert(
+        titleText,
+        message,
+      );
+    };
 
   useEffect(() => {
     const loadRoom =
@@ -236,12 +266,11 @@ export default function CreateEntryScreen() {
               `/rooms/${id}`,
             );
 
-          if (!response.ok) {
-            const body =
-              await response.text();
-
+          if (
+            !response.ok
+          ) {
             throw new Error(
-              `API ${response.status}: ${body}`,
+              await response.text(),
             );
           }
 
@@ -280,10 +309,40 @@ export default function CreateEntryScreen() {
       const trimmedTitle =
         title.trim();
 
-      if (!trimmedTitle) {
+      if (
+        !trimmedTitle
+      ) {
         showMessage(
           'Brak tytułu',
           'Podaj tytuł wpisu.',
+        );
+
+        return;
+      }
+
+      if (
+        tags.length >
+        10
+      ) {
+        showMessage(
+          'Za dużo tagów',
+          'Możesz dodać maksymalnie 10 tagów.',
+        );
+
+        return;
+      }
+
+      const tooLongTag =
+        tags.find(
+          (tag) =>
+            tag.length >
+            30,
+        );
+
+      if (tooLongTag) {
+        showMessage(
+          'Tag jest za długi',
+          'Tag może mieć maksymalnie 30 znaków.',
         );
 
         return;
@@ -293,17 +352,6 @@ export default function CreateEntryScreen() {
         setIsSaving(
           true,
         );
-
-        const payload = {
-          title:
-            trimmedTitle,
-
-          description:
-            description.trim() ||
-            undefined,
-
-          category,
-        };
 
         const response =
           await apiFetch(
@@ -318,24 +366,30 @@ export default function CreateEntryScreen() {
               },
 
               body:
-                JSON.stringify(
-                  payload,
-                ),
+                JSON.stringify({
+                  title:
+                    trimmedTitle,
+
+                  description:
+                    description
+                      .trim() ||
+                    undefined,
+
+                  category,
+
+                  tags,
+                }),
             },
           );
 
-        if (!response.ok) {
-          const body =
-            await response.text();
-
+        if (
+          !response.ok
+        ) {
           throw new Error(
-            `POST ${response.status}: ${body}`,
+            await response.text(),
           );
         }
 
-        /*
-         * Nie używamy router.back().
-         */
         router.replace({
           pathname:
             '/room/[id]',
@@ -346,13 +400,13 @@ export default function CreateEntryScreen() {
         });
       } catch (err) {
         console.error(
-          'Błąd zapisu wpisu:',
+          'Błąd tworzenia wpisu:',
           err,
         );
 
         showMessage(
           'Błąd',
-          'Nie udało się zapisać wpisu.',
+          'Nie udało się utworzyć wpisu.',
         );
       } finally {
         setIsSaving(
@@ -360,6 +414,13 @@ export default function CreateEntryScreen() {
         );
       }
     };
+
+  const headerTitle =
+    room?.property?.name
+      ? `${room.property.name} › ${room.name} › Dodaj wpis`
+      : room
+        ? `${room.name} › Dodaj wpis`
+        : 'Dodaj wpis';
 
   if (isLoading) {
     return (
@@ -375,7 +436,6 @@ export default function CreateEntryScreen() {
           style={
             styles.container
           }
-          edges={['bottom']}
         >
           <View
             style={
@@ -385,14 +445,6 @@ export default function CreateEntryScreen() {
             <ActivityIndicator
               size="large"
             />
-
-            <Text
-              style={
-                styles.infoText
-              }
-            >
-              Pobieranie pomieszczenia...
-            </Text>
           </View>
         </SafeAreaView>
       </>
@@ -413,7 +465,6 @@ export default function CreateEntryScreen() {
           style={
             styles.container
           }
-          edges={['bottom']}
         >
           <View
             style={
@@ -441,13 +492,6 @@ export default function CreateEntryScreen() {
     );
   }
 
-  const headerTitle =
-    room?.property?.name
-      ? `${room.property.name} › ${room.name} › Dodaj wpis`
-      : room
-        ? `${room.name} › Dodaj wpis`
-        : 'Dodaj wpis';
-
   return (
     <>
       <Stack.Screen
@@ -461,7 +505,9 @@ export default function CreateEntryScreen() {
         style={
           styles.container
         }
-        edges={['bottom']}
+        edges={[
+          'bottom',
+        ]}
       >
         <ScrollView
           contentContainerStyle={
@@ -477,15 +523,13 @@ export default function CreateEntryScreen() {
             Dodaj wpis
           </Text>
 
-          {room && (
-            <Text
-              style={
-                styles.subtitle
-              }
-            >
-              🚪 {room.name}
-            </Text>
-          )}
+          <Text
+            style={
+              styles.subtitle
+            }
+          >
+            Dodaj informacje dotyczące instalacji, urządzenia lub wykonanych prac.
+          </Text>
 
           <View
             style={
@@ -518,24 +562,19 @@ export default function CreateEntryScreen() {
                       key={
                         option.value
                       }
+                      disabled={
+                        isSaving
+                      }
                       onPress={() =>
                         setCategory(
                           option.value,
                         )
                       }
-                      disabled={
-                        isSaving
-                      }
-                      style={({
-                        pressed,
-                      }) => [
+                      style={[
                         styles.categoryButton,
 
                         selected &&
                           styles.categoryButtonSelected,
-
-                        pressed &&
-                          styles.pressed,
                       ]}
                     >
                       <Text
@@ -575,17 +614,19 @@ export default function CreateEntryScreen() {
             </Text>
 
             <TextInput
-              value={title}
+              value={
+                title
+              }
               onChangeText={
                 setTitle
               }
-              style={
-                styles.input
-              }
-              placeholder="np. Zawór pod umywalką"
-              placeholderTextColor="#9CA3AF"
               editable={
                 !isSaving
+              }
+              placeholder="np. Serwis pieca"
+              placeholderTextColor="#9CA3AF"
+              style={
+                styles.input
               }
             />
 
@@ -604,20 +645,86 @@ export default function CreateEntryScreen() {
               onChangeText={
                 setDescription
               }
-              style={[
-                styles.input,
-                styles.textArea,
-              ]}
-              placeholder="Dodaj szczegóły, uwagi lub informacje techniczne"
+              editable={
+                !isSaving
+              }
+              placeholder="Dodatkowe informacje..."
               placeholderTextColor="#9CA3AF"
               multiline
               numberOfLines={
                 6
               }
+              style={[
+                styles.input,
+                styles.textArea,
+              ]}
+            />
+
+            <Text
+              style={
+                styles.label
+              }
+            >
+              Tagi
+            </Text>
+
+            <TextInput
+              value={
+                tagsText
+              }
+              onChangeText={
+                setTagsText
+              }
               editable={
                 !isSaving
               }
+              autoCapitalize="none"
+              placeholder="np. gwarancja, serwis, faktura"
+              placeholderTextColor="#9CA3AF"
+              style={
+                styles.input
+              }
             />
+
+            <Text
+              style={
+                styles.helperText
+              }
+            >
+              Oddziel tagi przecinkami. Maksymalnie 10 tagów.
+            </Text>
+
+            {tags.length >
+              0 && (
+              <View
+                style={
+                  styles.tagsPreview
+                }
+              >
+                {tags.map(
+                  (
+                    tag,
+                  ) => (
+                    <View
+                      key={
+                        tag
+                      }
+                      style={
+                        styles.tagChip
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.tagChipText
+                        }
+                      >
+                        #{tag}
+                      </Text>
+                    </View>
+                  ),
+                )}
+              </View>
+            )}
 
             <Pressable
               disabled={
@@ -626,13 +733,8 @@ export default function CreateEntryScreen() {
               onPress={
                 handleSave
               }
-              style={({
-                pressed,
-              }) => [
+              style={[
                 styles.saveButton,
-
-                pressed &&
-                  styles.pressed,
 
                 isSaving &&
                   styles.disabled,
@@ -645,7 +747,6 @@ export default function CreateEntryScreen() {
                   }
                 >
                   <ActivityIndicator
-                    size="small"
                     color="#FFFFFF"
                   />
 
@@ -734,6 +835,7 @@ const styles =
       marginTop: 8,
       fontSize: 15,
       color: '#6B7280',
+      lineHeight: 21,
     },
 
     form: {
@@ -815,6 +917,36 @@ const styles =
         'top',
     },
 
+    helperText: {
+      marginTop: 7,
+      fontSize: 12,
+      color: '#6B7280',
+    },
+
+    tagsPreview: {
+      marginTop: 12,
+      flexDirection:
+        'row',
+      flexWrap:
+        'wrap',
+      gap: 8,
+    },
+
+    tagChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 9,
+      backgroundColor:
+        '#EFF6FF',
+    },
+
+    tagChipText: {
+      color: '#1D4ED8',
+      fontSize: 12,
+      fontWeight:
+        '600',
+    },
+
     saveButton: {
       marginTop: 30,
       minHeight: 52,
@@ -866,10 +998,6 @@ const styles =
       fontWeight:
         '700',
       color: '#B91C1C',
-    },
-
-    pressed: {
-      opacity: 0.75,
     },
 
     disabled: {

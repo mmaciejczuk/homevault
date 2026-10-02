@@ -46,6 +46,7 @@ model Entry {
   title       String
   description String?
   category    EntryCategory
+  tags        String[]       @default([])
 
   roomId Int
   room   Room @relation(fields: [roomId], references: [id], onDelete: Cascade)

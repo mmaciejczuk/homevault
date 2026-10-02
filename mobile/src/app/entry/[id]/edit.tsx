@@ -6,6 +6,7 @@ import {
 
 import {
   useEffect,
+  useMemo,
   useState,
 } from 'react';
 
@@ -44,6 +45,7 @@ interface Entry {
   title: string;
   description?: string | null;
   category: EntryCategory;
+  tags: string[];
   roomId: number;
 }
 
@@ -133,6 +135,26 @@ const categories:
     },
   ];
 
+function parseTags(
+  value: string,
+) {
+  return [
+    ...new Set(
+      value
+        .split(',')
+        .map(
+          (tag) =>
+            tag
+              .trim()
+              .toLowerCase(),
+        )
+        .filter(
+          Boolean,
+        ),
+    ),
+  ];
+}
+
 export default function EditEntryScreen() {
   const { id } =
     useLocalSearchParams<{
@@ -158,12 +180,14 @@ export default function EditEntryScreen() {
   const [
     title,
     setTitle,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     description,
     setDescription,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     category,
@@ -174,42 +198,61 @@ export default function EditEntryScreen() {
     );
 
   const [
+    tagsText,
+    setTagsText,
+  ] =
+    useState('');
+
+  const [
     isLoading,
     setIsLoading,
-  ] = useState(true);
+  ] =
+    useState(true);
 
   const [
     isSaving,
     setIsSaving,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const [
     error,
     setError,
   ] =
-    useState<string | null>(
-      null,
+    useState<
+      string | null
+    >(null);
+
+  const tags =
+    useMemo(
+      () =>
+        parseTags(
+          tagsText,
+        ),
+      [tagsText],
     );
 
-  const showMessage = (
-    titleText: string,
-    message: string,
-  ) => {
-    if (
-      Platform.OS === 'web'
-    ) {
-      window.alert(
-        `${titleText}\n\n${message}`,
+  const showMessage =
+    (
+      titleText: string,
+      message: string,
+    ) => {
+      if (
+        Platform.OS ===
+        'web'
+      ) {
+        window.alert(
+          `${titleText}\n\n${message}`,
+        );
+
+        return;
+      }
+
+      Alert.alert(
+        titleText,
+        message,
       );
-
-      return;
-    }
-
-    Alert.alert(
-      titleText,
-      message,
-    );
-  };
+    };
 
   useEffect(() => {
     const loadEntry =
@@ -289,6 +332,13 @@ export default function EditEntryScreen() {
           setCategory(
             entryData.category,
           );
+
+          setTagsText(
+            (
+              entryData.tags ??
+              []
+            ).join(', '),
+          );
         } catch (err) {
           console.error(
             'Błąd pobierania wpisu:',
@@ -317,10 +367,40 @@ export default function EditEntryScreen() {
       const trimmedTitle =
         title.trim();
 
-      if (!trimmedTitle) {
+      if (
+        !trimmedTitle
+      ) {
         showMessage(
           'Brak tytułu',
           'Podaj tytuł wpisu.',
+        );
+
+        return;
+      }
+
+      if (
+        tags.length >
+        10
+      ) {
+        showMessage(
+          'Za dużo tagów',
+          'Możesz dodać maksymalnie 10 tagów.',
+        );
+
+        return;
+      }
+
+      const tooLongTag =
+        tags.find(
+          (tag) =>
+            tag.length >
+            30,
+        );
+
+      if (tooLongTag) {
+        showMessage(
+          'Tag jest za długi',
+          'Tag może mieć maksymalnie 30 znaków.',
         );
 
         return;
@@ -349,15 +429,20 @@ export default function EditEntryScreen() {
                     trimmedTitle,
 
                   description:
-                    description.trim() ||
+                    description
+                      .trim() ||
                     null,
 
                   category,
+
+                  tags,
                 }),
             },
           );
 
-        if (!response.ok) {
+        if (
+          !response.ok
+        ) {
           throw new Error(
             await response.text(),
           );
@@ -478,7 +563,9 @@ export default function EditEntryScreen() {
         style={
           styles.container
         }
-        edges={['bottom']}
+        edges={[
+          'bottom',
+        ]}
       >
         <ScrollView
           contentContainerStyle={
@@ -525,6 +612,9 @@ export default function EditEntryScreen() {
                       key={
                         option.value
                       }
+                      disabled={
+                        isSaving
+                      }
                       onPress={() =>
                         setCategory(
                           option.value,
@@ -537,7 +627,11 @@ export default function EditEntryScreen() {
                           styles.categoryButtonSelected,
                       ]}
                     >
-                      <Text>
+                      <Text
+                        style={
+                          styles.categoryIcon
+                        }
+                      >
                         {
                           option.icon
                         }
@@ -570,7 +664,9 @@ export default function EditEntryScreen() {
             </Text>
 
             <TextInput
-              value={title}
+              value={
+                title
+              }
               onChangeText={
                 setTitle
               }
@@ -609,6 +705,72 @@ export default function EditEntryScreen() {
                 !isSaving
               }
             />
+
+            <Text
+              style={
+                styles.label
+              }
+            >
+              Tagi
+            </Text>
+
+            <TextInput
+              value={
+                tagsText
+              }
+              onChangeText={
+                setTagsText
+              }
+              editable={
+                !isSaving
+              }
+              autoCapitalize="none"
+              placeholder="np. gwarancja, serwis, faktura"
+              placeholderTextColor="#9CA3AF"
+              style={
+                styles.input
+              }
+            />
+
+            <Text
+              style={
+                styles.helperText
+              }
+            >
+              Oddziel tagi przecinkami. Maksymalnie 10 tagów.
+            </Text>
+
+            {tags.length >
+              0 && (
+              <View
+                style={
+                  styles.tagsPreview
+                }
+              >
+                {tags.map(
+                  (
+                    tag,
+                  ) => (
+                    <View
+                      key={
+                        tag
+                      }
+                      style={
+                        styles.tagChip
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.tagChipText
+                        }
+                      >
+                        #{tag}
+                      </Text>
+                    </View>
+                  ),
+                )}
+              </View>
+            )}
 
             <Pressable
               disabled={
@@ -733,6 +895,8 @@ const styles =
         '#FFFFFF',
       flexDirection:
         'row',
+      alignItems:
+        'center',
       gap: 7,
     },
 
@@ -741,6 +905,10 @@ const styles =
         '#111827',
       borderColor:
         '#111827',
+    },
+
+    categoryIcon: {
+      fontSize: 18,
     },
 
     categoryText: {
@@ -771,6 +939,36 @@ const styles =
       minHeight: 130,
       textAlignVertical:
         'top',
+    },
+
+    helperText: {
+      marginTop: 7,
+      fontSize: 12,
+      color: '#6B7280',
+    },
+
+    tagsPreview: {
+      marginTop: 12,
+      flexDirection:
+        'row',
+      flexWrap:
+        'wrap',
+      gap: 8,
+    },
+
+    tagChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 9,
+      backgroundColor:
+        '#EFF6FF',
+    },
+
+    tagChipText: {
+      color: '#1D4ED8',
+      fontSize: 12,
+      fontWeight:
+        '600',
     },
 
     saveButton: {

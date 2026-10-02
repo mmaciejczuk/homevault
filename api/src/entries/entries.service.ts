@@ -21,16 +21,23 @@ import type {
   UpdateEntryDto,
 } from './dto/update-entry.dto';
 
-const ENTRY_CATEGORIES: EntryCategory[] = [
-  'ELECTRICAL',
-  'PLUMBING',
-  'HEATING',
-  'WALL',
-  'FLOOR',
-  'DEVICE',
-  'NOTE',
-  'OTHER',
-];
+const ENTRY_CATEGORIES:
+  EntryCategory[] = [
+    'ELECTRICAL',
+    'PLUMBING',
+    'HEATING',
+    'WALL',
+    'FLOOR',
+    'DEVICE',
+    'NOTE',
+    'OTHER',
+  ];
+
+const MAX_TAGS =
+  10;
+
+const MAX_TAG_LENGTH =
+  30;
 
 @Injectable()
 export class EntriesService {
@@ -47,19 +54,20 @@ export class EntriesService {
     ownerId: string,
   ) {
     const room =
-      await this.prisma.room.findFirst({
-        where: {
-          id: roomId,
+      await this.prisma.room
+        .findFirst({
+          where: {
+            id: roomId,
 
-          property: {
-            ownerId,
+            property: {
+              ownerId,
+            },
           },
-        },
 
-        select: {
-          id: true,
-        },
-      });
+          select: {
+            id: true,
+          },
+        });
 
     if (!room) {
       throw new NotFoundException(
@@ -67,15 +75,17 @@ export class EntriesService {
       );
     }
 
-    return this.prisma.entry.findMany({
-      where: {
-        roomId,
-      },
+    return this.prisma.entry
+      .findMany({
+        where: {
+          roomId,
+        },
 
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        orderBy: {
+          createdAt:
+            'desc',
+        },
+      });
   }
 
   async findOne(
@@ -83,27 +93,28 @@ export class EntriesService {
     ownerId: string,
   ) {
     const entry =
-      await this.prisma.entry.findFirst({
-        where: {
-          id,
+      await this.prisma.entry
+        .findFirst({
+          where: {
+            id,
 
-          room: {
-            property: {
-              ownerId,
+            room: {
+              property: {
+                ownerId,
+              },
             },
           },
-        },
 
-        include: {
-          room: {
-            select: {
-              id: true,
-              name: true,
-              propertyId: true,
+          include: {
+            room: {
+              select: {
+                id: true,
+                name: true,
+                propertyId: true,
+              },
             },
           },
-        },
-      });
+        });
 
     if (!entry) {
       throw new NotFoundException(
@@ -120,19 +131,20 @@ export class EntriesService {
     ownerId: string,
   ) {
     const room =
-      await this.prisma.room.findFirst({
-        where: {
-          id: roomId,
+      await this.prisma.room
+        .findFirst({
+          where: {
+            id: roomId,
 
-          property: {
-            ownerId,
+            property: {
+              ownerId,
+            },
           },
-        },
 
-        select: {
-          id: true,
-        },
-      });
+          select: {
+            id: true,
+          },
+        });
 
     if (!room) {
       throw new NotFoundException(
@@ -140,7 +152,9 @@ export class EntriesService {
       );
     }
 
-    if (!dto.title?.trim()) {
+    if (
+      !dto.title?.trim()
+    ) {
       throw new BadRequestException(
         'Entry title is required',
       );
@@ -156,21 +170,30 @@ export class EntriesService {
       );
     }
 
-    return this.prisma.entry.create({
-      data: {
-        title:
-          dto.title.trim(),
+    const tags =
+      this.normalizeTags(
+        dto.tags,
+      );
 
-        description:
-          dto.description?.trim() ||
-          undefined,
+    return this.prisma.entry
+      .create({
+        data: {
+          title:
+            dto.title.trim(),
 
-        category:
-          dto.category,
+          description:
+            dto.description
+              ?.trim() ||
+            undefined,
 
-        roomId,
-      },
-    });
+          category:
+            dto.category,
+
+          tags,
+
+          roomId,
+        },
+      });
   }
 
   async update(
@@ -179,21 +202,22 @@ export class EntriesService {
     ownerId: string,
   ) {
     const entry =
-      await this.prisma.entry.findFirst({
-        where: {
-          id,
+      await this.prisma.entry
+        .findFirst({
+          where: {
+            id,
 
-          room: {
-            property: {
-              ownerId,
+            room: {
+              property: {
+                ownerId,
+              },
             },
           },
-        },
 
-        select: {
-          id: true,
-        },
-      });
+          select: {
+            id: true,
+          },
+        });
 
     if (!entry) {
       throw new NotFoundException(
@@ -202,7 +226,8 @@ export class EntriesService {
     }
 
     if (
-      dto.title !== undefined &&
+      dto.title !==
+        undefined &&
       !dto.title.trim()
     ) {
       throw new BadRequestException(
@@ -211,7 +236,8 @@ export class EntriesService {
     }
 
     if (
-      dto.category !== undefined &&
+      dto.category !==
+        undefined &&
       !ENTRY_CATEGORIES.includes(
         dto.category,
       )
@@ -221,37 +247,55 @@ export class EntriesService {
       );
     }
 
-    return this.prisma.entry.update({
-      where: {
-        id,
-      },
+    const tags =
+      dto.tags !==
+      undefined
+        ? this.normalizeTags(
+            dto.tags,
+          )
+        : undefined;
 
-      data: {
-        ...(dto.title !== undefined
-          ? {
-              title:
-                dto.title.trim(),
-            }
-          : {}),
+    return this.prisma.entry
+      .update({
+        where: {
+          id,
+        },
 
-        ...(dto.description !==
-        undefined
-          ? {
-              description:
-                dto.description
-                  ?.trim() ||
-                null,
-            }
-          : {}),
+        data: {
+          ...(dto.title !==
+          undefined
+            ? {
+                title:
+                  dto.title.trim(),
+              }
+            : {}),
 
-        ...(dto.category !== undefined
-          ? {
-              category:
-                dto.category,
-            }
-          : {}),
-      },
-    });
+          ...(dto.description !==
+          undefined
+            ? {
+                description:
+                  dto.description
+                    ?.trim() ||
+                  null,
+              }
+            : {}),
+
+          ...(dto.category !==
+          undefined
+            ? {
+                category:
+                  dto.category,
+              }
+            : {}),
+
+          ...(tags !==
+          undefined
+            ? {
+                tags,
+              }
+            : {}),
+        },
+      });
   }
 
   async remove(
@@ -259,25 +303,27 @@ export class EntriesService {
     ownerId: string,
   ) {
     const entry =
-      await this.prisma.entry.findFirst({
-        where: {
-          id,
+      await this.prisma.entry
+        .findFirst({
+          where: {
+            id,
 
-          room: {
-            property: {
-              ownerId,
+            room: {
+              property: {
+                ownerId,
+              },
             },
           },
-        },
 
-        include: {
-          attachments: {
-            select: {
-              storagePath: true,
+          include: {
+            attachments: {
+              select: {
+                storagePath:
+                  true,
+              },
             },
           },
-        },
-      });
+        });
 
     if (!entry) {
       throw new NotFoundException(
@@ -294,22 +340,86 @@ export class EntriesService {
       );
 
     if (
-      storagePaths.length > 0
+      storagePaths.length >
+      0
     ) {
-      await this.storage.removeMany(
-        storagePaths,
-      );
+      await this.storage
+        .removeMany(
+          storagePaths,
+        );
     }
 
-    await this.prisma.entry.delete({
-      where: {
-        id,
-      },
-    });
+    await this.prisma.entry
+      .delete({
+        where: {
+          id,
+        },
+      });
 
     return {
       success: true,
       id,
     };
+  }
+
+  private normalizeTags(
+    input:
+      | string[]
+      | undefined,
+  ) {
+    if (!input) {
+      return [];
+    }
+
+    if (
+      !Array.isArray(input)
+    ) {
+      throw new BadRequestException(
+        'Tags must be an array',
+      );
+    }
+
+    const normalized =
+      input
+        .map(
+          (tag) =>
+            tag
+              .trim()
+              .toLowerCase(),
+        )
+        .filter(
+          Boolean,
+        );
+
+    const unique =
+      [
+        ...new Set(
+          normalized,
+        ),
+      ];
+
+    if (
+      unique.length >
+      MAX_TAGS
+    ) {
+      throw new BadRequestException(
+        `Maximum ${MAX_TAGS} tags are allowed`,
+      );
+    }
+
+    const invalidTag =
+      unique.find(
+        (tag) =>
+          tag.length >
+          MAX_TAG_LENGTH,
+      );
+
+    if (invalidTag) {
+      throw new BadRequestException(
+        `Tag cannot be longer than ${MAX_TAG_LENGTH} characters`,
+      );
+    }
+
+    return unique;
   }
 }
