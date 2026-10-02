@@ -9,6 +9,9 @@ import { EntriesModule } from './entries/entries.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { AuthModule } from './auth/auth.module';
 import { AccountModule } from './account/account.module';
+import {
+  SearchModule,
+} from './search/search.module';
 
 @Module({
   imports: [
@@ -18,6 +21,7 @@ import { AccountModule } from './account/account.module';
     AttachmentsModule,
     AuthModule,
     AccountModule,
+    SearchModule,
   ],
 
   controllers: [

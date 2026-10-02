@@ -98,6 +98,14 @@ function RootNavigator() {
         />
 
         <Stack.Screen
+          name="search"
+          options={{
+            title:
+              'Wyszukiwanie',
+          }}
+        />
+
+        <Stack.Screen
           name="account"
           options={{
             title:

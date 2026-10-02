@@ -28,8 +28,8 @@ import {
 interface Property {
   id: number;
   name: string;
-  address?: string;
-  yearBuilt?: number;
+  address?: string | null;
+  yearBuilt?: number | null;
 }
 
 export default function HomeScreen() {
@@ -63,12 +63,16 @@ export default function HomeScreen() {
             );
 
           if (!response.ok) {
+            const body =
+              await response.text();
+
             throw new Error(
-              `API zwróciło status ${response.status}`,
+              `API zwróciło status ${response.status}: ${body}`,
             );
           }
 
-          const data: Property[] =
+          const data:
+            Property[] =
             await response.json();
 
           setProperties(data);
@@ -90,7 +94,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadProperties();
+      void loadProperties();
     }, [loadProperties]),
   );
 
@@ -98,6 +102,13 @@ export default function HomeScreen() {
     () => {
       router.push(
         '/create-property',
+      );
+    };
+
+  const handleSearch =
+    () => {
+      router.push(
+        '/search',
       );
     };
 
@@ -151,40 +162,71 @@ export default function HomeScreen() {
               styles.subtitle
             }
           >
-            Twoja cyfrowa
-            dokumentacja domu
+            Twoja cyfrowa dokumentacja domu
           </Text>
         </View>
 
-        <Pressable
-          onPress={
-            handleAccount
+        <View
+          style={
+            styles.headerActions
           }
-          style={({
-            pressed,
-          }) => [
-            styles.accountButton,
-
-            pressed &&
-              styles.buttonPressed,
-          ]}
         >
-          <Text
-            style={
-              styles.accountIcon
+          <Pressable
+            onPress={
+              handleSearch
             }
-          >
-            👤
-          </Text>
+            accessibilityRole="button"
+            accessibilityLabel="Wyszukiwanie"
+            style={({
+              pressed,
+            }) => [
+              styles.searchButton,
 
-          <Text
-            style={
-              styles.accountButtonText
-            }
+              pressed &&
+                styles.buttonPressed,
+            ]}
           >
-            Konto
-          </Text>
-        </Pressable>
+            <Text
+              style={
+                styles.searchIcon
+              }
+            >
+              🔎
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={
+              handleAccount
+            }
+            accessibilityRole="button"
+            accessibilityLabel="Konto"
+            style={({
+              pressed,
+            }) => [
+              styles.accountButton,
+
+              pressed &&
+                styles.buttonPressed,
+            ]}
+          >
+            <Text
+              style={
+                styles.accountIcon
+              }
+            >
+              👤
+            </Text>
+
+            <Text
+              style={
+                styles.accountButtonText
+              }
+            >
+              Konto
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -249,8 +291,7 @@ export default function HomeScreen() {
                 styles.loadingText
               }
             >
-              Pobieranie
-              nieruchomości...
+              Pobieranie nieruchomości...
             </Text>
           </View>
         )}
@@ -267,8 +308,7 @@ export default function HomeScreen() {
                   styles.errorTitle
                 }
               >
-                Nie udało się
-                pobrać danych
+                Nie udało się pobrać danych
               </Text>
 
               <Text
@@ -331,8 +371,7 @@ export default function HomeScreen() {
                   styles.emptyTitle
                 }
               >
-                Dodaj swój
-                pierwszy dom
+                Dodaj swój pierwszy dom
               </Text>
 
               <Text
@@ -340,14 +379,7 @@ export default function HomeScreen() {
                   styles.emptyText
                 }
               >
-                Utwórz
-                nieruchomość,
-                aby zacząć
-                przechowywać
-                dokumentację,
-                zdjęcia i
-                informacje o
-                swoim domu.
+                Utwórz nieruchomość, aby zacząć przechowywać dokumentację, zdjęcia i informacje o swoim domu.
               </Text>
 
               <Pressable
@@ -489,8 +521,10 @@ const styles =
       paddingHorizontal: 24,
       paddingTop: 14,
       paddingBottom: 18,
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
       justifyContent:
         'space-between',
       borderBottomWidth: 1,
@@ -502,12 +536,21 @@ const styles =
 
     headerText: {
       flex: 1,
-      marginRight: 16,
+      marginRight: 12,
+    },
+
+    headerActions: {
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+      gap: 8,
     },
 
     logo: {
       fontSize: 26,
-      fontWeight: '800',
+      fontWeight:
+        '800',
       color: '#111827',
     },
 
@@ -515,6 +558,25 @@ const styles =
       marginTop: 3,
       fontSize: 13,
       color: '#6B7280',
+    },
+
+    searchButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 11,
+      borderWidth: 1,
+      borderColor:
+        '#D1D5DB',
+      backgroundColor:
+        '#FFFFFF',
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
+
+    searchIcon: {
+      fontSize: 18,
     },
 
     accountButton: {
@@ -526,8 +588,10 @@ const styles =
         '#D1D5DB',
       backgroundColor:
         '#FFFFFF',
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
       justifyContent:
         'center',
     },
@@ -540,7 +604,8 @@ const styles =
     accountButtonText: {
       color: '#374151',
       fontSize: 14,
-      fontWeight: '600',
+      fontWeight:
+        '600',
     },
 
     scrollView: {
@@ -553,21 +618,25 @@ const styles =
     },
 
     titleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
       justifyContent:
         'space-between',
     },
 
     title: {
       fontSize: 28,
-      fontWeight: '700',
+      fontWeight:
+        '700',
       color: '#111827',
     },
 
     center: {
       marginTop: 80,
-      alignItems: 'center',
+      alignItems:
+        'center',
       justifyContent:
         'center',
       paddingHorizontal: 20,
@@ -580,15 +649,18 @@ const styles =
 
     errorTitle: {
       fontSize: 20,
-      fontWeight: '700',
+      fontWeight:
+        '700',
       color: '#111827',
-      textAlign: 'center',
+      textAlign:
+        'center',
     },
 
     errorText: {
       marginTop: 8,
       color: '#6B7280',
-      textAlign: 'center',
+      textAlign:
+        'center',
     },
 
     retryButton: {
@@ -602,12 +674,14 @@ const styles =
 
     retryButtonText: {
       color: '#FFFFFF',
-      fontWeight: '600',
+      fontWeight:
+        '600',
     },
 
     emptyState: {
       marginTop: 70,
-      alignItems: 'center',
+      alignItems:
+        'center',
       paddingHorizontal: 20,
     },
 
@@ -620,7 +694,8 @@ const styles =
       borderWidth: 1,
       borderColor:
         '#E5E7EB',
-      alignItems: 'center',
+      alignItems:
+        'center',
       justifyContent:
         'center',
     },
@@ -632,9 +707,11 @@ const styles =
     emptyTitle: {
       marginTop: 22,
       fontSize: 22,
-      fontWeight: '700',
+      fontWeight:
+        '700',
       color: '#111827',
-      textAlign: 'center',
+      textAlign:
+        'center',
     },
 
     emptyText: {
@@ -643,7 +720,8 @@ const styles =
       fontSize: 15,
       lineHeight: 22,
       color: '#6B7280',
-      textAlign: 'center',
+      textAlign:
+        'center',
     },
 
     addButton: {
@@ -653,7 +731,8 @@ const styles =
       borderRadius: 12,
       backgroundColor:
         '#111827',
-      alignItems: 'center',
+      alignItems:
+        'center',
       justifyContent:
         'center',
     },
@@ -661,7 +740,8 @@ const styles =
     addButtonText: {
       color: '#FFFFFF',
       fontSize: 15,
-      fontWeight: '600',
+      fontWeight:
+        '600',
     },
 
     smallAddButton: {
@@ -675,7 +755,8 @@ const styles =
     smallAddButtonText: {
       color: '#FFFFFF',
       fontSize: 14,
-      fontWeight: '600',
+      fontWeight:
+        '600',
     },
 
     propertiesList: {
@@ -688,8 +769,10 @@ const styles =
         '#FFFFFF',
       borderRadius: 16,
       padding: 18,
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
       borderWidth: 1,
       borderColor:
         '#E5E7EB',
@@ -707,7 +790,8 @@ const styles =
         '#F3F4F6',
       justifyContent:
         'center',
-      alignItems: 'center',
+      alignItems:
+        'center',
     },
 
     propertyIcon: {
@@ -721,7 +805,8 @@ const styles =
 
     propertyName: {
       fontSize: 18,
-      fontWeight: '600',
+      fontWeight:
+        '600',
       color: '#111827',
     },
 
