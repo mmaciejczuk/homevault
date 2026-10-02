@@ -1,11 +1,16 @@
 import {
   router,
+  Stack,
   useLocalSearchParams,
 } from 'expo-router';
 
-import { useState } from 'react';
+import {
+  useEffect,
+  useState,
+} from 'react';
 
 import {
+  ActivityIndicator,
   Alert,
   Platform,
   Pressable,
@@ -20,31 +25,74 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
-import { apiFetch } from '../../../lib/api';
+import {
+  apiFetch,
+} from '../../../lib/api';
+
+interface Property {
+  id: number;
+  name: string;
+}
 
 export default function CreateRoomScreen() {
   const { id } =
-    useLocalSearchParams<{ id: string }>();
+    useLocalSearchParams<{
+      id: string;
+    }>();
 
-  const [name, setName] =
+  const [
+    property,
+    setProperty,
+  ] =
+    useState<Property | null>(
+      null,
+    );
+
+  const [
+    name,
+    setName,
+  ] =
     useState('');
 
-  const [floor, setFloor] =
+  const [
+    floor,
+    setFloor,
+  ] =
     useState('');
 
   const [
     description,
     setDescription,
-  ] = useState('');
+  ] =
+    useState('');
 
-  const [isSaving, setIsSaving] =
+  const [
+    isLoading,
+    setIsLoading,
+  ] =
+    useState(true);
+
+  const [
+    isSaving,
+    setIsSaving,
+  ] =
     useState(false);
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string | null
+    >(null);
 
   const showMessage = (
     title: string,
     message: string,
   ) => {
-    if (Platform.OS === 'web') {
+    if (
+      Platform.OS === 'web'
+    ) {
       window.alert(
         `${title}\n\n${message}`,
       );
@@ -58,278 +106,572 @@ export default function CreateRoomScreen() {
     );
   };
 
-  const handleSave = async () => {
-    if (!id) {
-      showMessage(
-        'Błąd',
-        'Brak identyfikatora domu.',
-      );
+  useEffect(() => {
+    const loadProperty =
+      async () => {
+        if (!id) {
+          setError(
+            'Brak identyfikatora domu.',
+          );
 
-      return;
-    }
+          setIsLoading(
+            false,
+          );
 
-    if (!name.trim()) {
-      showMessage(
-        'Brak nazwy',
-        'Podaj nazwę pomieszczenia.',
-      );
+          return;
+        }
 
-      return;
-    }
+        try {
+          setIsLoading(
+            true,
+          );
 
-    try {
-      setIsSaving(true);
+          setError(
+            null,
+          );
 
-      const payload = {
-        name: name.trim(),
-        floor:
-          floor.trim() ||
-          undefined,
-        description:
-          description.trim() ||
-          undefined,
+          const response =
+            await apiFetch(
+              `/properties/${id}`,
+            );
+
+          if (!response.ok) {
+            const body =
+              await response.text();
+
+            throw new Error(
+              `API ${response.status}: ${body}`,
+            );
+          }
+
+          const data:
+            Property =
+            await response.json();
+
+          setProperty(
+            data,
+          );
+        } catch (err) {
+          console.error(
+            'Błąd pobierania domu:',
+            err,
+          );
+
+          setError(
+            'Nie udało się pobrać danych domu.',
+          );
+        } finally {
+          setIsLoading(
+            false,
+          );
+        }
       };
 
-      console.log(
-        'Dodaję pomieszczenie:',
-        payload,
-      );
+    void loadProperty();
+  }, [id]);
 
-      const response =
-        await apiFetch(
-          `/properties/${id}/rooms`,
-          {
-            method: 'POST',
-
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-
-            body: JSON.stringify(
-              payload,
-            ),
-          },
-        );
-
-      if (!response.ok) {
-        const responseBody =
-          await response.text();
-
-        throw new Error(
-          `API zwróciło status ${response.status}: ${responseBody}`,
-        );
+  const handleSave =
+    async () => {
+      if (!id) {
+        return;
       }
 
-      const createdRoom =
-        await response.json();
+      const trimmedName =
+        name.trim();
 
-      console.log(
-        'Pomieszczenie zapisane:',
-        createdRoom,
-      );
+      if (!trimmedName) {
+        showMessage(
+          'Brak nazwy',
+          'Podaj nazwę pomieszczenia.',
+        );
 
-      showMessage(
-        'Zapisano',
-        `Dodano pomieszczenie: ${createdRoom.name}`,
-      );
+        return;
+      }
 
-      router.back();
-    } catch (error) {
-      console.error(
-        'Błąd zapisu pomieszczenia:',
-        error,
-      );
+      try {
+        setIsSaving(
+          true,
+        );
 
-      showMessage(
-        'Błąd',
-        'Nie udało się zapisać pomieszczenia.',
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
+        const payload = {
+          name:
+            trimmedName,
 
-  return (
-    <SafeAreaView
-      style={styles.container}
-      edges={['bottom']}
-    >
-      <ScrollView
-        contentContainerStyle={
-          styles.content
+          floor:
+            floor.trim() ||
+            undefined,
+
+          description:
+            description.trim() ||
+            undefined,
+        };
+
+        const response =
+          await apiFetch(
+            `/properties/${id}/rooms`,
+            {
+              method:
+                'POST',
+
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+
+              body:
+                JSON.stringify(
+                  payload,
+                ),
+            },
+          );
+
+        if (!response.ok) {
+          const body =
+            await response.text();
+
+          throw new Error(
+            `POST ${response.status}: ${body}`,
+          );
         }
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.title}>
-          Dodaj pomieszczenie
-        </Text>
 
-        <Text style={styles.subtitle}>
-          Dodaj podstawowe informacje.
-        </Text>
+        /*
+         * Jawna nawigacja zamiast
+         * router.back().
+         */
+        router.replace({
+          pathname:
+            '/property/[id]/rooms',
 
-        <View style={styles.form}>
-          <Text style={styles.label}>
-            Nazwa *
-          </Text>
+          params: {
+            id,
+          },
+        });
+      } catch (err) {
+        console.error(
+          'Błąd zapisu pomieszczenia:',
+          err,
+        );
 
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            style={styles.input}
-            placeholder="np. Salon"
-          />
+        showMessage(
+          'Błąd',
+          'Nie udało się zapisać pomieszczenia.',
+        );
+      } finally {
+        setIsSaving(
+          false,
+        );
+      }
+    };
 
-          <Text style={styles.label}>
-            Kondygnacja
-          </Text>
+  if (isLoading) {
+    return (
+      <>
+        <Stack.Screen
+          options={{
+            title:
+              'Dodaj pomieszczenie',
+          }}
+        />
 
-          <TextInput
-            value={floor}
-            onChangeText={setFloor}
-            style={styles.input}
-            placeholder="np. Parter"
-          />
-
-          <Text style={styles.label}>
-            Opis
-          </Text>
-
-          <TextInput
-            value={description}
-            onChangeText={
-              setDescription
+        <SafeAreaView
+          style={
+            styles.container
+          }
+          edges={['bottom']}
+        >
+          <View
+            style={
+              styles.center
             }
-            style={[
-              styles.input,
-              styles.textArea,
-            ]}
-            placeholder="np. Główne pomieszczenie dzienne"
-            multiline
-            numberOfLines={4}
-          />
+          >
+            <ActivityIndicator
+              size="large"
+            />
 
-          <Pressable
-            disabled={isSaving}
-            onPress={handleSave}
-            style={({ pressed }) => [
-              styles.saveButton,
+            <Text
+              style={
+                styles.infoText
+              }
+            >
+              Pobieranie domu...
+            </Text>
+          </View>
+        </SafeAreaView>
+      </>
+    );
+  }
 
-              pressed &&
-                styles.pressed,
+  if (error) {
+    return (
+      <>
+        <Stack.Screen
+          options={{
+            title:
+              'Dodaj pomieszczenie',
+          }}
+        />
 
-              isSaving &&
-                styles.disabled,
-            ]}
+        <SafeAreaView
+          style={
+            styles.container
+          }
+          edges={['bottom']}
+        >
+          <View
+            style={
+              styles.center
+            }
           >
             <Text
               style={
-                styles.saveButtonText
+                styles.errorTitle
               }
             >
-              {isSaving
-                ? 'Zapisywanie...'
-                : 'Zapisz'}
+              Wystąpił błąd
             </Text>
-          </Pressable>
 
-          <Pressable
-            onPress={() =>
-              router.back()
-            }
+            <Text
+              style={
+                styles.infoText
+              }
+            >
+              {error}
+            </Text>
+          </View>
+        </SafeAreaView>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Stack.Screen
+        options={{
+          title:
+            property
+              ? `${property.name} › Dodaj pomieszczenie`
+              : 'Dodaj pomieszczenie',
+        }}
+      />
+
+      <SafeAreaView
+        style={
+          styles.container
+        }
+        edges={['bottom']}
+      >
+        <ScrollView
+          contentContainerStyle={
+            styles.content
+          }
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text
             style={
-              styles.cancelButton
+              styles.title
+            }
+          >
+            Dodaj pomieszczenie
+          </Text>
+
+          {property && (
+            <Text
+              style={
+                styles.subtitle
+              }
+            >
+              🏠 {property.name}
+            </Text>
+          )}
+
+          <View
+            style={
+              styles.form
             }
           >
             <Text
-              style={styles.cancelText}
+              style={
+                styles.label
+              }
             >
-              Anuluj
+              Nazwa *
             </Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+
+            <TextInput
+              value={name}
+              onChangeText={
+                setName
+              }
+              style={
+                styles.input
+              }
+              placeholder="np. Łazienka"
+              placeholderTextColor="#9CA3AF"
+              editable={
+                !isSaving
+              }
+            />
+
+            <Text
+              style={
+                styles.label
+              }
+            >
+              Kondygnacja
+            </Text>
+
+            <TextInput
+              value={floor}
+              onChangeText={
+                setFloor
+              }
+              style={
+                styles.input
+              }
+              placeholder="np. Parter"
+              placeholderTextColor="#9CA3AF"
+              editable={
+                !isSaving
+              }
+            />
+
+            <Text
+              style={
+                styles.label
+              }
+            >
+              Opis
+            </Text>
+
+            <TextInput
+              value={
+                description
+              }
+              onChangeText={
+                setDescription
+              }
+              style={[
+                styles.input,
+                styles.textArea,
+              ]}
+              placeholder="Opcjonalny opis pomieszczenia"
+              placeholderTextColor="#9CA3AF"
+              multiline
+              numberOfLines={
+                5
+              }
+              editable={
+                !isSaving
+              }
+            />
+
+            <Pressable
+              disabled={
+                isSaving
+              }
+              onPress={
+                handleSave
+              }
+              style={({
+                pressed,
+              }) => [
+                styles.saveButton,
+
+                pressed &&
+                  styles.pressed,
+
+                isSaving &&
+                  styles.disabled,
+              ]}
+            >
+              {isSaving ? (
+                <View
+                  style={
+                    styles.savingRow
+                  }
+                >
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+
+                  <Text
+                    style={
+                      styles.saveButtonText
+                    }
+                  >
+                    Zapisywanie...
+                  </Text>
+                </View>
+              ) : (
+                <Text
+                  style={
+                    styles.saveButtonText
+                  }
+                >
+                  Dodaj pomieszczenie
+                </Text>
+              )}
+            </Pressable>
+
+            <Pressable
+              disabled={
+                isSaving
+              }
+              onPress={() =>
+                router.replace({
+                  pathname:
+                    '/property/[id]/rooms',
+
+                  params: {
+                    id,
+                  },
+                })
+              }
+              style={
+                styles.cancelButton
+              }
+            >
+              <Text
+                style={
+                  styles.cancelText
+                }
+              >
+                Anuluj
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F7F8FA',
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        '#F7F8FA',
+    },
 
-  content: {
-    padding: 24,
-  },
+    content: {
+      padding: 24,
+      paddingBottom: 60,
+    },
 
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-  },
+    center: {
+      flex: 1,
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
+      padding: 24,
+    },
 
-  subtitle: {
-    marginTop: 6,
-    color: '#6B7280',
-  },
+    title: {
+      fontSize: 28,
+      fontWeight:
+        '700',
+      color: '#111827',
+    },
 
-  form: {
-    marginTop: 32,
-  },
+    subtitle: {
+      marginTop: 8,
+      fontSize: 15,
+      color: '#6B7280',
+    },
 
-  label: {
-    marginBottom: 8,
-    marginTop: 18,
-    fontWeight: '600',
-    color: '#374151',
-  },
+    form: {
+      marginTop: 28,
+    },
 
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-  },
+    label: {
+      marginTop: 18,
+      marginBottom: 8,
+      fontSize: 14,
+      fontWeight:
+        '600',
+      color: '#374151',
+    },
 
-  textArea: {
-    minHeight: 110,
-    textAlignVertical: 'top',
-  },
+    input: {
+      backgroundColor:
+        '#FFFFFF',
+      borderWidth: 1,
+      borderColor:
+        '#D1D5DB',
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      fontSize: 16,
+      color: '#111827',
+    },
 
-  saveButton: {
-    marginTop: 30,
-    backgroundColor: '#111827',
-    minHeight: 52,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    textArea: {
+      minHeight: 120,
+      textAlignVertical:
+        'top',
+    },
 
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+    saveButton: {
+      marginTop: 30,
+      minHeight: 52,
+      borderRadius: 12,
+      backgroundColor:
+        '#111827',
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
 
-  cancelButton: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
+    saveButtonText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight:
+        '600',
+    },
 
-  cancelText: {
-    color: '#6B7280',
-  },
+    savingRow: {
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+      gap: 10,
+    },
 
-  pressed: {
-    opacity: 0.75,
-  },
+    cancelButton: {
+      marginTop: 10,
+      paddingVertical: 16,
+      alignItems:
+        'center',
+    },
 
-  disabled: {
-    opacity: 0.5,
-  },
-});
+    cancelText: {
+      color: '#6B7280',
+      fontSize: 15,
+    },
+
+    infoText: {
+      marginTop: 10,
+      color: '#6B7280',
+      textAlign:
+        'center',
+    },
+
+    errorTitle: {
+      fontSize: 20,
+      fontWeight:
+        '700',
+      color: '#B91C1C',
+    },
+
+    pressed: {
+      opacity: 0.75,
+    },
+
+    disabled: {
+      opacity: 0.5,
+    },
+  });

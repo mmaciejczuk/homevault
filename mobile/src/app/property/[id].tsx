@@ -1,5 +1,6 @@
 import {
   router,
+  Stack,
   useFocusEffect,
   useLocalSearchParams,
 } from 'expo-router';
@@ -41,21 +42,33 @@ export default function PropertyDetailsScreen() {
       id: string;
     }>();
 
-  const [property, setProperty] =
+  const [
+    property,
+    setProperty,
+  ] =
     useState<Property | null>(
       null,
     );
 
-  const [isLoading, setIsLoading] =
+  const [
+    isLoading,
+    setIsLoading,
+  ] =
     useState(true);
 
-  const [isDeleting, setIsDeleting] =
+  const [
+    isDeleting,
+    setIsDeleting,
+  ] =
     useState(false);
 
-  const [error, setError] =
-    useState<string | null>(
-      null,
-    );
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string | null
+    >(null);
 
   const loadProperty =
     useCallback(
@@ -79,13 +92,20 @@ export default function PropertyDetailsScreen() {
             );
 
           if (!response.ok) {
+            const body =
+              await response.text();
+
             throw new Error(
-              await response.text(),
+              `API ${response.status}: ${body}`,
             );
           }
 
+          const data:
+            Property =
+            await response.json();
+
           setProperty(
-            await response.json(),
+            data,
           );
         } catch (err) {
           console.error(
@@ -122,16 +142,17 @@ export default function PropertyDetailsScreen() {
     });
   };
 
-  const handleOpenRooms = () => {
-    router.push({
-      pathname:
-        '/property/[id]/rooms',
+  const handleOpenRooms =
+    () => {
+      router.push({
+        pathname:
+          '/property/[id]/rooms',
 
-      params: {
-        id,
-      },
-    });
-  };
+        params: {
+          id,
+        },
+      });
+    };
 
   const askDelete =
     async () => {
@@ -151,7 +172,7 @@ export default function PropertyDetailsScreen() {
           Alert.alert(
             'Usuń dom',
 
-            'Usunięte zostaną także wszystkie pomieszczenia, wpisy i zdjęcia.',
+            'Usunięte zostaną również wszystkie pomieszczenia, wpisy i zdjęcia.',
 
             [
               {
@@ -161,10 +182,11 @@ export default function PropertyDetailsScreen() {
                 style:
                   'cancel',
 
-                onPress: () =>
-                  resolve(
-                    false,
-                  ),
+                onPress:
+                  () =>
+                    resolve(
+                      false,
+                    ),
               },
 
               {
@@ -174,10 +196,11 @@ export default function PropertyDetailsScreen() {
                 style:
                   'destructive',
 
-                onPress: () =>
-                  resolve(
-                    true,
-                  ),
+                onPress:
+                  () =>
+                    resolve(
+                      true,
+                    ),
               },
             ],
 
@@ -202,9 +225,10 @@ export default function PropertyDetailsScreen() {
         return;
       }
 
-      if (
-        !(await askDelete())
-      ) {
+      const confirmed =
+        await askDelete();
+
+      if (!confirmed) {
         return;
       }
 
@@ -257,25 +281,38 @@ export default function PropertyDetailsScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView
-        style={styles.container}
-      >
-        <View
-          style={styles.center}
-        >
-          <ActivityIndicator
-            size="large"
-          />
+      <>
+        <Stack.Screen
+          options={{
+            title:
+              'Dom',
+          }}
+        />
 
-          <Text
+        <SafeAreaView
+          style={
+            styles.container
+          }
+        >
+          <View
             style={
-              styles.infoText
+              styles.center
             }
           >
-            Pobieranie domu...
-          </Text>
-        </View>
-      </SafeAreaView>
+            <ActivityIndicator
+              size="large"
+            />
+
+            <Text
+              style={
+                styles.infoText
+              }
+            >
+              Pobieranie domu...
+            </Text>
+          </View>
+        </SafeAreaView>
+      </>
     );
   }
 
@@ -284,175 +321,207 @@ export default function PropertyDetailsScreen() {
     !property
   ) {
     return (
-      <SafeAreaView
-        style={styles.container}
-      >
-        <View
-          style={styles.center}
-        >
-          <Text
-            style={
-              styles.errorTitle
-            }
-          >
-            Nie udało się otworzyć domu
-          </Text>
+      <>
+        <Stack.Screen
+          options={{
+            title:
+              'Dom',
+          }}
+        />
 
-          <Text
+        <SafeAreaView
+          style={
+            styles.container
+          }
+        >
+          <View
             style={
-              styles.infoText
+              styles.center
             }
           >
-            {error}
-          </Text>
-        </View>
-      </SafeAreaView>
+            <Text
+              style={
+                styles.errorTitle
+              }
+            >
+              Nie udało się otworzyć domu
+            </Text>
+
+            <Text
+              style={
+                styles.infoText
+              }
+            >
+              {error}
+            </Text>
+          </View>
+        </SafeAreaView>
+      </>
     );
   }
 
   return (
-    <SafeAreaView
-      style={styles.container}
-      edges={['bottom']}
-    >
-      <ScrollView
-        contentContainerStyle={
-          styles.content
+    <>
+      <Stack.Screen
+        options={{
+          title:
+            property.name,
+        }}
+      />
+
+      <SafeAreaView
+        style={
+          styles.container
         }
+        edges={['bottom']}
       >
-        <Text
-          style={styles.icon}
-        >
-          🏠
-        </Text>
-
-        <Text
-          style={styles.name}
-        >
-          {property.name}
-        </Text>
-
-        {property.address && (
-          <Text
-            style={
-              styles.detail
-            }
-          >
-            📍 {property.address}
-          </Text>
-        )}
-
-        {property.yearBuilt && (
-          <Text
-            style={
-              styles.detail
-            }
-          >
-            Rok budowy:{' '}
-            {property.yearBuilt}
-          </Text>
-        )}
-
-        <View
-          style={
-            styles.actions
-          }
-        >
-          <Pressable
-            onPress={handleEdit}
-            style={
-              styles.editButton
-            }
-          >
-            <Text
-              style={
-                styles.editText
-              }
-            >
-              ✏️ Edytuj
-            </Text>
-          </Pressable>
-
-          <Pressable
-            disabled={
-              isDeleting
-            }
-            onPress={
-              handleDelete
-            }
-            style={
-              styles.deleteButton
-            }
-          >
-            <Text
-              style={
-                styles.deleteText
-              }
-            >
-              {isDeleting
-                ? 'Usuwanie...'
-                : '🗑 Usuń'}
-            </Text>
-          </Pressable>
-        </View>
-
-        <Text
-          style={
-            styles.sectionTitle
-          }
-        >
-          Dokumentacja domu
-        </Text>
-
-        <Pressable
-          onPress={
-            handleOpenRooms
-          }
-          style={
-            styles.menuCard
+        <ScrollView
+          contentContainerStyle={
+            styles.content
           }
         >
           <Text
             style={
-              styles.menuIcon
+              styles.icon
             }
           >
-            🚪
+            🏠
           </Text>
 
-          <View
+          <Text
             style={
-              styles.menuContent
+              styles.name
             }
           >
-            <Text
-              style={
-                styles.menuTitle
-              }
-            >
-              Pomieszczenia
-            </Text>
+            {property.name}
+          </Text>
 
+          {property.address && (
             <Text
               style={
                 styles.detail
               }
             >
-              Salon, kuchnia,
-              łazienka...
+              📍{' '}
+              {property.address}
             </Text>
+          )}
+
+          {property.yearBuilt && (
+            <Text
+              style={
+                styles.detail
+              }
+            >
+              Rok budowy:{' '}
+              {property.yearBuilt}
+            </Text>
+          )}
+
+          <View
+            style={
+              styles.actions
+            }
+          >
+            <Pressable
+              onPress={
+                handleEdit
+              }
+              style={
+                styles.editButton
+              }
+            >
+              <Text
+                style={
+                  styles.editText
+                }
+              >
+                ✏️ Edytuj
+              </Text>
+            </Pressable>
+
+            <Pressable
+              disabled={
+                isDeleting
+              }
+              onPress={
+                handleDelete
+              }
+              style={
+                styles.deleteButton
+              }
+            >
+              <Text
+                style={
+                  styles.deleteText
+                }
+              >
+                {isDeleting
+                  ? 'Usuwanie...'
+                  : '🗑 Usuń'}
+              </Text>
+            </Pressable>
           </View>
 
           <Text
             style={
-              styles.arrow
+              styles.sectionTitle
             }
           >
-            ›
+            Dokumentacja domu
           </Text>
-        </Pressable>
-      </ScrollView>
-    </SafeAreaView>
+
+          <Pressable
+            onPress={
+              handleOpenRooms
+            }
+            style={
+              styles.menuCard
+            }
+          >
+            <Text
+              style={
+                styles.menuIcon
+              }
+            >
+              🚪
+            </Text>
+
+            <View
+              style={
+                styles.menuContent
+              }
+            >
+              <Text
+                style={
+                  styles.menuTitle
+                }
+              >
+                Pomieszczenia
+              </Text>
+
+              <Text
+                style={
+                  styles.menuDescription
+                }
+              >
+                Salon, kuchnia,
+                łazienka,
+                kotłownia...
+              </Text>
+            </View>
+
+            <Text
+              style={
+                styles.arrow
+              }
+            >
+              ›
+            </Text>
+          </Pressable>
+        </ScrollView>
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -466,6 +535,7 @@ const styles =
 
     content: {
       padding: 24,
+      paddingBottom: 60,
     },
 
     center: {
@@ -503,7 +573,8 @@ const styles =
     },
 
     editButton: {
-      padding: 13,
+      paddingHorizontal: 16,
+      paddingVertical: 13,
       borderRadius: 10,
       backgroundColor:
         '#FFFFFF',
@@ -519,7 +590,8 @@ const styles =
     },
 
     deleteButton: {
-      padding: 13,
+      paddingHorizontal: 16,
+      paddingVertical: 13,
       borderRadius: 10,
       backgroundColor:
         '#FEE2E2',
@@ -570,6 +642,11 @@ const styles =
       color: '#111827',
     },
 
+    menuDescription: {
+      marginTop: 4,
+      color: '#6B7280',
+    },
+
     arrow: {
       fontSize: 30,
       color: '#9CA3AF',
@@ -587,5 +664,7 @@ const styles =
       fontWeight:
         '700',
       color: '#B91C1C',
+      textAlign:
+        'center',
     },
   });

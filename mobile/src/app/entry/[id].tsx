@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import {
   router,
+  Stack,
   useFocusEffect,
   useLocalSearchParams,
 } from 'expo-router';
@@ -28,11 +29,21 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
-import { File } from 'expo-file-system';
-import { fetch as expoFetch } from 'expo/fetch';
+import {
+  File,
+} from 'expo-file-system';
 
-import { apiFetch } from '../../lib/api';
-import { supabase } from '../../lib/supabase';
+import {
+  fetch as expoFetch,
+} from 'expo/fetch';
+
+import {
+  apiFetch,
+} from '../../lib/api';
+
+import {
+  supabase,
+} from '../../lib/supabase';
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ??
@@ -51,19 +62,26 @@ type EntryCategory =
 interface Entry {
   id: number;
   title: string;
-  description?: string;
+  description?: string | null;
   category: EntryCategory;
   roomId: number;
   createdAt: string;
   updatedAt: string;
 }
 
+interface Property {
+  id: number;
+  name: string;
+}
+
 interface Room {
   id: number;
   name: string;
-  floor?: string;
-  description?: string;
+  floor?: string | null;
+  description?: string | null;
   propertyId: number;
+
+  property?: Property;
 }
 
 interface Attachment {
@@ -72,26 +90,49 @@ interface Attachment {
   storagePath: string;
   mimeType: string;
   size: number;
-  kind: 'IMAGE' | 'DOCUMENT';
+  kind:
+    | 'IMAGE'
+    | 'DOCUMENT';
   entryId: number;
   createdAt: string;
   url: string;
 }
 
 const categoryLabels:
-  Record<EntryCategory, string> = {
-    ELECTRICAL: 'Elektryka',
-    PLUMBING: 'Hydraulika',
-    HEATING: 'Ogrzewanie',
-    WALL: 'Ściany',
-    FLOOR: 'Podłoga',
-    DEVICE: 'Urządzenie',
-    NOTE: 'Notatka',
-    OTHER: 'Inne',
+  Record<
+    EntryCategory,
+    string
+  > = {
+    ELECTRICAL:
+      'Elektryka',
+
+    PLUMBING:
+      'Hydraulika',
+
+    HEATING:
+      'Ogrzewanie',
+
+    WALL:
+      'Ściany',
+
+    FLOOR:
+      'Podłoga',
+
+    DEVICE:
+      'Urządzenie',
+
+    NOTE:
+      'Notatka',
+
+    OTHER:
+      'Inne',
   };
 
 const categoryIcons:
-  Record<EntryCategory, string> = {
+  Record<
+    EntryCategory,
+    string
+  > = {
     ELECTRICAL: '⚡',
     PLUMBING: '💧',
     HEATING: '🔥',
@@ -102,26 +143,72 @@ const categoryIcons:
     OTHER: '📌',
   };
 
+function formatFileSize(
+  bytes: number,
+) {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  const kb =
+    bytes / 1024;
+
+  if (kb < 1024) {
+    return `${kb.toFixed(
+      1,
+    )} KB`;
+  }
+
+  const mb =
+    kb / 1024;
+
+  return `${mb.toFixed(
+    1,
+  )} MB`;
+}
+
 export default function EntryDetailsScreen() {
   const { id } =
-    useLocalSearchParams<{ id: string }>();
+    useLocalSearchParams<{
+      id: string;
+    }>();
 
-  const [entry, setEntry] =
-    useState<Entry | null>(null);
+  const [
+    entry,
+    setEntry,
+  ] =
+    useState<Entry | null>(
+      null,
+    );
 
-  const [room, setRoom] =
-    useState<Room | null>(null);
+  const [
+    room,
+    setRoom,
+  ] =
+    useState<Room | null>(
+      null,
+    );
 
-  const [attachments, setAttachments] =
-    useState<Attachment[]>([]);
+  const [
+    attachments,
+    setAttachments,
+  ] =
+    useState<
+      Attachment[]
+    >([]);
 
   const [
     selectedAttachment,
     setSelectedAttachment,
   ] =
-    useState<Attachment | null>(null);
+    useState<
+      Attachment | null
+    >(null);
 
-  const [isLoading, setIsLoading] =
+  const [
+    isLoading,
+    setIsLoading,
+  ] =
     useState(true);
 
   const [
@@ -131,260 +218,462 @@ export default function EntryDetailsScreen() {
     useState(false);
 
   const [
-    isDeleting,
-    setIsDeleting,
+    isDeletingAttachment,
+    setIsDeletingAttachment,
   ] =
     useState(false);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [
+    isDeletingEntry,
+    setIsDeletingEntry,
+  ] =
+    useState(false);
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string | null
+    >(null);
+
+  const showMessage =
+    (
+      message: string,
+    ) => {
+      if (
+        Platform.OS ===
+        'web'
+      ) {
+        window.alert(
+          message,
+        );
+
+        return;
+      }
+
+      Alert.alert(
+        'HomeVault',
+        message,
+      );
+    };
 
   const loadData =
-    useCallback(async () => {
+    useCallback(
+      async () => {
+        if (!id) {
+          return;
+        }
+
+        try {
+          setIsLoading(
+            true,
+          );
+
+          setError(
+            null,
+          );
+
+          const entryResponse =
+            await apiFetch(
+              `/entries/${id}`,
+            );
+
+          if (
+            !entryResponse.ok
+          ) {
+            const body =
+              await entryResponse.text();
+
+            throw new Error(
+              `Entry API ${entryResponse.status}: ${body}`,
+            );
+          }
+
+          const entryData:
+            Entry =
+            await entryResponse.json();
+
+          const [
+            roomResponse,
+            attachmentsResponse,
+          ] =
+            await Promise.all([
+              apiFetch(
+                `/rooms/${entryData.roomId}`,
+              ),
+
+              apiFetch(
+                `/entries/${entryData.id}/attachments`,
+              ),
+            ]);
+
+          if (
+            !roomResponse.ok
+          ) {
+            const body =
+              await roomResponse.text();
+
+            throw new Error(
+              `Room API ${roomResponse.status}: ${body}`,
+            );
+          }
+
+          if (
+            !attachmentsResponse.ok
+          ) {
+            const body =
+              await attachmentsResponse.text();
+
+            throw new Error(
+              `Attachments API ${attachmentsResponse.status}: ${body}`,
+            );
+          }
+
+          const roomData:
+            Room =
+            await roomResponse.json();
+
+          const attachmentsData:
+            Attachment[] =
+            await attachmentsResponse.json();
+
+          setEntry(
+            entryData,
+          );
+
+          setRoom(
+            roomData,
+          );
+
+          setAttachments(
+            attachmentsData,
+          );
+        } catch (err) {
+          console.error(
+            'Błąd pobierania wpisu:',
+            err,
+          );
+
+          setError(
+            'Nie udało się pobrać danych wpisu.',
+          );
+        } finally {
+          setIsLoading(
+            false,
+          );
+        }
+      },
+      [id],
+    );
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadData();
+    }, [loadData]),
+  );
+
+  const handleEditEntry =
+    () => {
       if (!id) {
         return;
       }
 
-      try {
-        setIsLoading(true);
-        setError(null);
+      router.push({
+        pathname:
+          '/entry/[id]/edit',
 
-        const entryResponse =
+        params: {
+          id,
+        },
+      });
+    };
+
+  const askDeleteEntry =
+    async () => {
+      if (
+        Platform.OS ===
+        'web'
+      ) {
+        return window.confirm(
+          'Usunąć ten wpis wraz ze wszystkimi zdjęciami?',
+        );
+      }
+
+      return new Promise<boolean>(
+        (
+          resolve,
+        ) => {
+          Alert.alert(
+            'Usuń wpis',
+
+            'Usunięty zostanie również cały zestaw zdjęć przypisanych do wpisu.',
+
+            [
+              {
+                text:
+                  'Anuluj',
+
+                style:
+                  'cancel',
+
+                onPress:
+                  () =>
+                    resolve(
+                      false,
+                    ),
+              },
+
+              {
+                text:
+                  'Usuń',
+
+                style:
+                  'destructive',
+
+                onPress:
+                  () =>
+                    resolve(
+                      true,
+                    ),
+              },
+            ],
+
+            {
+              cancelable:
+                true,
+
+              onDismiss:
+                () =>
+                  resolve(
+                    false,
+                  ),
+            },
+          );
+        },
+      );
+    };
+
+  const handleDeleteEntry =
+    async () => {
+      if (
+        !id ||
+        !entry
+      ) {
+        return;
+      }
+
+      const confirmed =
+        await askDeleteEntry();
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        setIsDeletingEntry(
+          true,
+        );
+
+        const response =
           await apiFetch(
             `/entries/${id}`,
+            {
+              method:
+                'DELETE',
+            },
           );
 
-        if (!entryResponse.ok) {
-          const responseBody =
-            await entryResponse.text();
+        if (!response.ok) {
+          const body =
+            await response.text();
 
           throw new Error(
-            `Entry API zwróciło status ${entryResponse.status}: ${responseBody}`,
+            `DELETE ${response.status}: ${body}`,
           );
         }
 
-        const entryData: Entry =
-          await entryResponse.json();
+        router.replace({
+          pathname:
+            '/room/[id]',
 
-        const [
-          roomResponse,
-          attachmentsResponse,
-        ] = await Promise.all([
-          apiFetch(
-            `/rooms/${entryData.roomId}`,
-          ),
-
-          apiFetch(
-            `/entries/${entryData.id}/attachments`,
-          ),
-        ]);
-
-        if (!roomResponse.ok) {
-          const responseBody =
-            await roomResponse.text();
-
-          throw new Error(
-            `Room API zwróciło status ${roomResponse.status}: ${responseBody}`,
-          );
-        }
-
-        if (
-          !attachmentsResponse.ok
-        ) {
-          const responseBody =
-            await attachmentsResponse.text();
-
-          throw new Error(
-            `Attachments API zwróciło status ${attachmentsResponse.status}: ${responseBody}`,
-          );
-        }
-
-        const roomData: Room =
-          await roomResponse.json();
-
-        const attachmentsData:
-          Attachment[] =
-          await attachmentsResponse.json();
-
-        setEntry(entryData);
-        setRoom(roomData);
-        setAttachments(
-          attachmentsData,
-        );
+          params: {
+            id:
+              entry.roomId.toString(),
+          },
+        });
       } catch (err) {
         console.error(
-          'Błąd pobierania wpisu:',
+          'Błąd usuwania wpisu:',
           err,
         );
 
-        setError(
-          'Nie udało się pobrać danych wpisu.',
+        showMessage(
+          'Nie udało się usunąć wpisu.',
         );
       } finally {
-        setIsLoading(false);
-      }
-    }, [id]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-    }, [loadData]),
-  );
-
-  const uploadImage = async (
-    asset: ImagePicker.ImagePickerAsset,
-  ) => {
-    if (!id) {
-      return;
-    }
-
-    /*
-     * WEB
-     *
-     * ImagePicker zwraca normalny
-     * browserowy File.
-     *
-     * apiFetch automatycznie
-     * dokłada Authorization.
-     *
-     * Nie ustawiamy Content-Type,
-     * ponieważ fetch sam wygeneruje
-     * multipart boundary.
-     */
-    if (Platform.OS === 'web') {
-      if (!asset.file) {
-        throw new Error(
-          'Brak obiektu File dla wybranego zdjęcia.',
+        setIsDeletingEntry(
+          false,
         );
       }
+    };
+
+  const uploadImage =
+    async (
+      asset:
+        ImagePicker.ImagePickerAsset,
+    ) => {
+      if (!id) {
+        return;
+      }
+
+      /*
+       * WEB
+       */
+      if (
+        Platform.OS ===
+        'web'
+      ) {
+        if (!asset.file) {
+          throw new Error(
+            'Brak obiektu File dla wybranego zdjęcia.',
+          );
+        }
+
+        const formData =
+          new FormData();
+
+        formData.append(
+          'file',
+
+          asset.file,
+
+          asset.fileName ??
+            asset.file.name ??
+            `photo-${Date.now()}.jpg`,
+        );
+
+        const response =
+          await apiFetch(
+            `/entries/${id}/attachments`,
+            {
+              method:
+                'POST',
+
+              body:
+                formData,
+            },
+          );
+
+        if (!response.ok) {
+          const body =
+            await response.text();
+
+          throw new Error(
+            `Upload ${response.status}: ${body}`,
+          );
+        }
+
+        return response.json();
+      }
+
+      /*
+       * ANDROID / IOS
+       *
+       * Zachowujemy działający
+       * wariant:
+       *
+       * expo-file-system File
+       * +
+       * expo/fetch
+       */
+      const {
+        data: {
+          session,
+        },
+
+        error:
+          sessionError,
+      } =
+        await supabase.auth
+          .getSession();
+
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      if (
+        !session
+          ?.access_token
+      ) {
+        throw new Error(
+          'Brak aktywnej sesji użytkownika.',
+        );
+      }
+
+      const file =
+        new File(
+          asset.uri,
+        );
 
       const formData =
         new FormData();
 
+      console.log(
+        'UPLOAD FILE',
+        {
+          uri:
+            file.uri,
+
+          name:
+            file.name,
+
+          type:
+            file.type,
+
+          size:
+            file.size,
+        },
+      );
+
       formData.append(
         'file',
-        asset.file,
-        asset.fileName ??
-          asset.file.name ??
-          `photo-${Date.now()}.jpg`,
+        file,
       );
 
       const response =
-        await apiFetch(
-          `/entries/${id}/attachments`,
+        await expoFetch(
+          `${API_URL}/entries/${id}/attachments`,
           {
-            method: 'POST',
-            body: formData,
+            method:
+              'POST',
+
+            headers: {
+              Authorization:
+                `Bearer ${session.access_token}`,
+            },
+
+            body:
+              formData,
           },
         );
 
+      console.log(
+        'UPLOAD RESPONSE:',
+        response.status,
+      );
+
       if (!response.ok) {
-        const responseBody =
+        const body =
           await response.text();
 
         throw new Error(
-          `Upload zwrócił ${response.status}: ${responseBody}`,
+          `Upload ${response.status}: ${body}`,
         );
       }
 
       return response.json();
-    }
-
-    /*
-     * ANDROID / IOS
-     *
-     * Zostawiamy działający wariant:
-     *
-     * expo-file-system File
-     * +
-     * expo/fetch
-     *
-     * Nie używamy obiektu:
-     *
-     * {
-     *   uri,
-     *   name,
-     *   type
-     * }
-     *
-     * ponieważ Expo zgłaszało:
-     *
-     * Unsupported FormDataPart implementation
-     */
-
-    const {
-      data: {
-        session,
-      },
-      error:
-        sessionError,
-    } =
-      await supabase.auth.getSession();
-
-    if (sessionError) {
-      throw sessionError;
-    }
-
-    if (
-      !session?.access_token
-    ) {
-      throw new Error(
-        'Brak aktywnej sesji użytkownika.',
-      );
-    }
-
-    const file =
-      new File(asset.uri);
-
-    const formData =
-      new FormData();
-
-    console.log(
-      'UPLOAD FILE',
-      {
-        uri: file.uri,
-        name: file.name,
-        type: file.type,
-        size: file.size,
-      },
-    );
-
-    formData.append(
-      'file',
-      file,
-    );
-
-    const response =
-      await expoFetch(
-        `${API_URL}/entries/${id}/attachments`,
-        {
-          method: 'POST',
-
-          headers: {
-            Authorization:
-              `Bearer ${session.access_token}`,
-          },
-
-          body: formData,
-        },
-      );
-
-    console.log(
-      'UPLOAD RESPONSE:',
-      response.status,
-    );
-
-    if (!response.ok) {
-      const responseBody =
-        await response.text();
-
-      throw new Error(
-        `Upload zwrócił ${response.status}: ${responseBody}`,
-      );
-    }
-
-    return response.json();
-  };
+    };
 
   const uploadPickedAsset =
     async (
@@ -392,9 +681,13 @@ export default function EntryDetailsScreen() {
         ImagePicker.ImagePickerAsset,
     ) => {
       try {
-        setIsUploading(true);
+        setIsUploading(
+          true,
+        );
 
-        await uploadImage(asset);
+        await uploadImage(
+          asset,
+        );
 
         await loadData();
       } catch (err) {
@@ -407,7 +700,9 @@ export default function EntryDetailsScreen() {
           'Nie udało się wysłać zdjęcia.',
         );
       } finally {
-        setIsUploading(false);
+        setIsUploading(
+          false,
+        );
       }
     };
 
@@ -416,20 +711,24 @@ export default function EntryDetailsScreen() {
       try {
         const result =
           await ImagePicker
-            .launchImageLibraryAsync({
-              mediaTypes: [
-                'images',
-              ],
+            .launchImageLibraryAsync(
+              {
+                mediaTypes: [
+                  'images',
+                ],
 
-              allowsEditing:
-                false,
+                allowsEditing:
+                  false,
 
-              quality: 0.85,
-            });
+                quality:
+                  0.85,
+              },
+            );
 
         if (
           result.canceled ||
-          !result.assets.length
+          !result.assets
+            .length
         ) {
           return;
         }
@@ -453,7 +752,8 @@ export default function EntryDetailsScreen() {
     async () => {
       try {
         if (
-          Platform.OS !== 'web'
+          Platform.OS !==
+          'web'
         ) {
           const permission =
             await ImagePicker
@@ -464,6 +764,7 @@ export default function EntryDetailsScreen() {
           ) {
             Alert.alert(
               'Brak dostępu do aparatu',
+
               'HomeVault potrzebuje dostępu do aparatu, aby wykonać zdjęcie.',
             );
 
@@ -473,20 +774,24 @@ export default function EntryDetailsScreen() {
 
         const result =
           await ImagePicker
-            .launchCameraAsync({
-              mediaTypes: [
-                'images',
-              ],
+            .launchCameraAsync(
+              {
+                mediaTypes: [
+                  'images',
+                ],
 
-              allowsEditing:
-                false,
+                allowsEditing:
+                  false,
 
-              quality: 0.85,
-            });
+                quality:
+                  0.85,
+              },
+            );
 
         if (
           result.canceled ||
-          !result.assets.length
+          !result.assets
+            .length
         ) {
           return;
         }
@@ -506,18 +811,21 @@ export default function EntryDetailsScreen() {
       }
     };
 
-  const askDeleteConfirmation =
-    async (): Promise<boolean> => {
+  const askDeleteAttachment =
+    async () => {
       if (
-        Platform.OS === 'web'
+        Platform.OS ===
+        'web'
       ) {
         return window.confirm(
           'Czy na pewno chcesz usunąć to zdjęcie?',
         );
       }
 
-      return new Promise(
-        (resolve) => {
+      return new Promise<boolean>(
+        (
+          resolve,
+        ) => {
           Alert.alert(
             'Usuń zdjęcie',
 
@@ -525,29 +833,43 @@ export default function EntryDetailsScreen() {
 
             [
               {
-                text: 'Anuluj',
-                style: 'cancel',
+                text:
+                  'Anuluj',
 
-                onPress: () =>
-                  resolve(false),
+                style:
+                  'cancel',
+
+                onPress:
+                  () =>
+                    resolve(
+                      false,
+                    ),
               },
 
               {
-                text: 'Usuń',
+                text:
+                  'Usuń',
 
                 style:
                   'destructive',
 
-                onPress: () =>
-                  resolve(true),
+                onPress:
+                  () =>
+                    resolve(
+                      true,
+                    ),
               },
             ],
 
             {
-              cancelable: true,
+              cancelable:
+                true,
 
-              onDismiss: () =>
-                resolve(false),
+              onDismiss:
+                () =>
+                  resolve(
+                    false,
+                  ),
             },
           );
         },
@@ -563,14 +885,16 @@ export default function EntryDetailsScreen() {
       }
 
       const confirmed =
-        await askDeleteConfirmation();
+        await askDeleteAttachment();
 
       if (!confirmed) {
         return;
       }
 
       try {
-        setIsDeleting(true);
+        setIsDeletingAttachment(
+          true,
+        );
 
         const response =
           await apiFetch(
@@ -582,11 +906,11 @@ export default function EntryDetailsScreen() {
           );
 
         if (!response.ok) {
-          const responseBody =
+          const body =
             await response.text();
 
           throw new Error(
-            `DELETE zwrócił ${response.status}: ${responseBody}`,
+            `DELETE ${response.status}: ${body}`,
           );
         }
 
@@ -605,146 +929,47 @@ export default function EntryDetailsScreen() {
           'Nie udało się usunąć zdjęcia.',
         );
       } finally {
-        setIsDeleting(false);
+        setIsDeletingAttachment(
+          false,
+        );
       }
     };
 
-  const showMessage = (
-    message: string,
-  ) => {
-    if (
-      Platform.OS === 'web'
-    ) {
-      window.alert(message);
-    } else {
-      Alert.alert(
-        'HomeVault',
-        message,
-      );
-    }
-  };
-
-  const handleEditEntry = () => {
-  router.push({
-    pathname:
-      '/entry/[id]/edit',
-
-    params: {
-      id,
-    },
-  });
-};
-
-const handleDeleteEntry =
-  async () => {
-    if (!id) {
-      return;
-    }
-
-    const confirmed =
-      Platform.OS === 'web'
-        ? window.confirm(
-            'Czy na pewno chcesz usunąć ten wpis wraz ze zdjęciami?',
-          )
-        : await new Promise<boolean>(
-            (
-              resolve,
-            ) => {
-              Alert.alert(
-                'Usuń wpis',
-
-                'Usunięte zostaną także wszystkie zdjęcia przypisane do wpisu.',
-
-                [
-                  {
-                    text:
-                      'Anuluj',
-
-                    style:
-                      'cancel',
-
-                    onPress:
-                      () =>
-                        resolve(
-                          false,
-                        ),
-                  },
-
-                  {
-                    text:
-                      'Usuń',
-
-                    style:
-                      'destructive',
-
-                    onPress:
-                      () =>
-                        resolve(
-                          true,
-                        ),
-                  },
-                ],
-              );
-            },
-          );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      const response =
-        await apiFetch(
-          `/entries/${id}`,
-          {
-            method:
-              'DELETE',
-          },
-        );
-
-      if (!response.ok) {
-        throw new Error(
-          await response.text(),
-        );
-      }
-
-      router.back();
-    } catch (error) {
-      console.error(
-        'Błąd usuwania wpisu:',
-        error,
-      );
-
-      showMessage(
-        'Nie udało się usunąć wpisu.',
-      );
-    }
-  };
-
   if (isLoading) {
     return (
-      <SafeAreaView
-        style={
-          styles.container
-        }
-        edges={['bottom']}
-      >
-        <View
-          style={styles.center}
-        >
-          <ActivityIndicator
-            size="large"
-          />
+      <>
+        <Stack.Screen
+          options={{
+            title:
+              'Wpis',
+          }}
+        />
 
-          <Text
+        <SafeAreaView
+          style={
+            styles.container
+          }
+          edges={['bottom']}
+        >
+          <View
             style={
-              styles.infoText
+              styles.center
             }
           >
-            Pobieranie wpisu...
-          </Text>
-        </View>
-      </SafeAreaView>
+            <ActivityIndicator
+              size="large"
+            />
+
+            <Text
+              style={
+                styles.infoText
+              }
+            >
+              Pobieranie wpisu...
+            </Text>
+          </View>
+        </SafeAreaView>
+      </>
     );
   }
 
@@ -753,235 +978,291 @@ const handleDeleteEntry =
     !entry
   ) {
     return (
+      <>
+        <Stack.Screen
+          options={{
+            title:
+              'Wpis',
+          }}
+        />
+
+        <SafeAreaView
+          style={
+            styles.container
+          }
+          edges={['bottom']}
+        >
+          <View
+            style={
+              styles.center
+            }
+          >
+            <Text
+              style={
+                styles.errorTitle
+              }
+            >
+              Wystąpił błąd
+            </Text>
+
+            <Text
+              style={
+                styles.infoText
+              }
+            >
+              {error}
+            </Text>
+
+            <Pressable
+              style={
+                styles.retryButton
+              }
+              onPress={
+                loadData
+              }
+            >
+              <Text
+                style={
+                  styles.retryButtonText
+                }
+              >
+                Spróbuj ponownie
+              </Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </>
+    );
+  }
+
+  const breadcrumbTitle =
+    room?.property?.name
+      ? `${room.property.name} › ${room.name} › ${entry.title}`
+      : room
+        ? `${room.name} › ${entry.title}`
+        : entry.title;
+
+  return (
+    <>
+      <Stack.Screen
+        options={{
+          title:
+            breadcrumbTitle,
+        }}
+      />
+
       <SafeAreaView
         style={
           styles.container
         }
         edges={['bottom']}
       >
-        <View
-          style={styles.center}
-        >
-          <Text
-            style={
-              styles.errorTitle
-            }
-          >
-            Wystąpił błąd
-          </Text>
-
-          <Text
-            style={
-              styles.infoText
-            }
-          >
-            {error}
-          </Text>
-
-          <Pressable
-            style={
-              styles.retryButton
-            }
-            onPress={loadData}
-          >
-            <Text
-              style={
-                styles.retryButtonText
-              }
-            >
-              Spróbuj ponownie
-            </Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView
-      style={
-        styles.container
-      }
-      edges={['bottom']}
-    >
-      <ScrollView
-        contentContainerStyle={
-          styles.content
-        }
-      >
-        <View
-          style={
-            styles.categoryRow
+        <ScrollView
+          contentContainerStyle={
+            styles.content
           }
         >
           <View
             style={
-              styles.categoryIconBox
+              styles.categoryRow
             }
           >
-            <Text
+            <View
               style={
-                styles.categoryIcon
+                styles.categoryIconBox
               }
             >
-              {
-                categoryIcons[
-                  entry.category
-                ]
-              }
-            </Text>
-          </View>
-
-          <View>
-            <Text
-              style={
-                styles.categoryLabel
-              }
-            >
-              {
-                categoryLabels[
-                  entry.category
-                ]
-              }
-            </Text>
-
-            {room && (
               <Text
                 style={
-                  styles.roomName
+                  styles.categoryIcon
                 }
               >
-                🚪 {room.name}
+                {
+                  categoryIcons[
+                    entry.category
+                  ]
+                }
               </Text>
-            )}
-          </View>
-        </View>
+            </View>
 
-        <Text
-          style={styles.title}
-        >
-          {entry.title}
-        </Text>
-
-        {entry.description && (
-          <Text
-            style={
-              styles.description
-            }
-          >
-            {
-              entry.description
-            }
-          </Text>
-        )}
-
-        <View
-          style={{
-            flexDirection: 'row',
-            gap: 12,
-            marginTop: 20,
-          }}
-        >
-          <Pressable
-            onPress={handleEditEntry}
-            style={{
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              borderRadius: 10,
-              borderWidth: 1,
-              borderColor: '#D1D5DB',
-              backgroundColor:
-                '#FFFFFF',
-            }}
-          >
-            <Text
-              style={{
-                fontWeight:
-                  '600',
-              }}
-            >
-              ✏️ Edytuj
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={
-              handleDeleteEntry
-            }
-            style={{
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              borderRadius: 10,
-              backgroundColor:
-                '#FEE2E2',
-            }}
-          >
-            <Text
-              style={{
-                color:
-                  '#B91C1C',
-                fontWeight:
-                  '600',
-              }}
-            >
-              🗑 Usuń wpis
-            </Text>
-          </Pressable>
-        </View>
-
-        <View
-          style={
-            styles.divider
-          }
-        />
-
-        <View
-          style={
-            styles.sectionHeader
-          }
-        >
-          <View>
-            <Text
+            <View
               style={
-                styles.sectionTitle
+                styles.categoryContent
               }
             >
-              Zdjęcia
-            </Text>
+              <Text
+                style={
+                  styles.categoryLabel
+                }
+              >
+                {
+                  categoryLabels[
+                    entry.category
+                  ]
+                }
+              </Text>
 
+              {room && (
+                <Text
+                  style={
+                    styles.roomName
+                  }
+                >
+                  🚪{' '}
+                  {room.name}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          <Text
+            style={
+              styles.title
+            }
+          >
+            {entry.title}
+          </Text>
+
+          {entry.description && (
             <Text
               style={
-                styles.sectionSubtitle
+                styles.description
               }
             >
               {
-                attachments.length ===
-                1
-                  ? '1 zdjęcie'
-                  : `${attachments.length} zdjęć`
+                entry.description
               }
             </Text>
-          </View>
-        </View>
+          )}
 
-        <View
-          style={
-            styles.photoActions
-          }
-        >
-          {Platform.OS !==
-            'web' && (
+          <View
+            style={
+              styles.entryActions
+            }
+          >
+            <Pressable
+              disabled={
+                isDeletingEntry
+              }
+              onPress={
+                handleEditEntry
+              }
+              style={
+                styles.editButton
+              }
+            >
+              <Text
+                style={
+                  styles.editButtonText
+                }
+              >
+                ✏️ Edytuj
+              </Text>
+            </Pressable>
+
+            <Pressable
+              disabled={
+                isDeletingEntry
+              }
+              onPress={
+                handleDeleteEntry
+              }
+              style={
+                styles.deleteEntryButton
+              }
+            >
+              <Text
+                style={
+                  styles.deleteEntryButtonText
+                }
+              >
+                {isDeletingEntry
+                  ? 'Usuwanie...'
+                  : '🗑 Usuń'}
+              </Text>
+            </Pressable>
+          </View>
+
+          <View
+            style={
+              styles.divider
+            }
+          />
+
+          <View
+            style={
+              styles.sectionHeader
+            }
+          >
+            <View>
+              <Text
+                style={
+                  styles.sectionTitle
+                }
+              >
+                Zdjęcia
+              </Text>
+
+              <Text
+                style={
+                  styles.sectionSubtitle
+                }
+              >
+                {attachments.length ===
+                1
+                  ? '1 zdjęcie'
+                  : `${attachments.length} zdjęć`}
+              </Text>
+            </View>
+          </View>
+
+          <View
+            style={
+              styles.photoActions
+            }
+          >
+            {Platform.OS !==
+              'web' && (
+              <Pressable
+                disabled={
+                  isUploading
+                }
+                onPress={
+                  handleTakePhoto
+                }
+                style={({
+                  pressed,
+                }) => [
+                  styles.cameraButton,
+
+                  pressed &&
+                    styles.pressed,
+
+                  isUploading &&
+                    styles.disabled,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.cameraButtonText
+                  }
+                >
+                  📷 Zrób zdjęcie
+                </Text>
+              </Pressable>
+            )}
+
             <Pressable
               disabled={
                 isUploading
               }
               onPress={
-                handleTakePhoto
+                handlePickImage
               }
               style={({
                 pressed,
               }) => [
-                styles.cameraButton,
+                styles.galleryButton,
 
                 pressed &&
                   styles.pressed,
@@ -992,381 +1273,296 @@ const handleDeleteEntry =
             >
               <Text
                 style={
-                  styles.cameraButtonText
+                  styles.galleryButtonText
                 }
               >
-                📷 Zrób zdjęcie
+                🖼️ Wybierz z galerii
               </Text>
             </Pressable>
+          </View>
+
+          {isUploading && (
+            <View
+              style={
+                styles.uploadStatus
+              }
+            >
+              <ActivityIndicator />
+
+              <Text
+                style={
+                  styles.uploadStatusText
+                }
+              >
+                Wysyłanie zdjęcia...
+              </Text>
+            </View>
           )}
 
-          <Pressable
-            disabled={
-              isUploading
-            }
-            onPress={
-              handlePickImage
-            }
-            style={({
-              pressed,
-            }) => [
-              styles.galleryButton,
-
-              pressed &&
-                styles.pressed,
-
-              isUploading &&
-                styles.disabled,
-            ]}
-          >
-            <Text
+          {attachments.length ===
+          0 ? (
+            <View
               style={
-                styles.galleryButtonText
+                styles.emptyState
               }
             >
-              🖼️ Wybierz z galerii
-            </Text>
-          </Pressable>
-        </View>
+              <Text
+                style={
+                  styles.emptyIcon
+                }
+              >
+                📷
+              </Text>
 
-        {isUploading && (
-          <View
-            style={
-              styles.uploadStatus
-            }
-          >
-            <ActivityIndicator />
+              <Text
+                style={
+                  styles.emptyTitle
+                }
+              >
+                Brak zdjęć
+              </Text>
 
-            <Text
+              <Text
+                style={
+                  styles.infoText
+                }
+              >
+                Zrób zdjęcie instalacji,
+                urządzenia albo
+                wykonanych prac lub
+                wybierz istniejące
+                zdjęcie.
+              </Text>
+            </View>
+          ) : (
+            <View
               style={
-                styles.uploadStatusText
+                styles.gallery
               }
             >
-              Wysyłanie zdjęcia...
-            </Text>
-          </View>
-        )}
-
-        {attachments.length ===
-        0 ? (
-          <View
-            style={
-              styles.emptyState
-            }
-          >
-            <Text
-              style={
-                styles.emptyIcon
-              }
-            >
-              📷
-            </Text>
-
-            <Text
-              style={
-                styles.emptyTitle
-              }
-            >
-              Brak zdjęć
-            </Text>
-
-            <Text
-              style={
-                styles.infoText
-              }
-            >
-              Zrób zdjęcie
-              instalacji,
-              urządzenia albo
-              wykonanych prac
-              lub wybierz
-              istniejące zdjęcie.
-            </Text>
-          </View>
-        ) : (
-          <View
-            style={
-              styles.gallery
-            }
-          >
-            {attachments.map(
-              (
-                attachment,
-              ) => (
-                <Pressable
-                  key={
-                    attachment.id
-                  }
-                  onPress={() =>
-                    setSelectedAttachment(
-                      attachment,
-                    )
-                  }
-                  style={({
-                    pressed,
-                  }) => [
-                    styles.imageCard,
-
-                    pressed &&
-                      styles.pressed,
-                  ]}
-                >
-                  <Image
-                    source={{
-                      uri:
-                        attachment.url,
-                    }}
-                    style={
-                      styles.image
+              {attachments.map(
+                (
+                  attachment,
+                ) => (
+                  <Pressable
+                    key={
+                      attachment.id
                     }
-                    resizeMode="cover"
-                  />
-
-                  <View
-                    style={
-                      styles.imageInfo
+                    onPress={() =>
+                      setSelectedAttachment(
+                        attachment,
+                      )
                     }
+                    style={({
+                      pressed,
+                    }) => [
+                      styles.imageCard,
+
+                      pressed &&
+                        styles.pressed,
+                    ]}
                   >
-                    <Text
+                    <Image
+                      source={{
+                        uri:
+                          attachment.url,
+                      }}
                       style={
-                        styles.fileName
+                        styles.image
                       }
-                      numberOfLines={
-                        1
+                      resizeMode="cover"
+                    />
+
+                    <View
+                      style={
+                        styles.imageInfo
                       }
                     >
-                      {
-                        attachment.fileName
-                      }
-                    </Text>
+                      <Text
+                        style={
+                          styles.fileName
+                        }
+                        numberOfLines={
+                          1
+                        }
+                      >
+                        {
+                          attachment.fileName
+                        }
+                      </Text>
 
-                    <Text
-                      style={
-                        styles.fileSize
-                      }
-                    >
-                      {formatFileSize(
-                        attachment.size,
-                      )}
-                    </Text>
-                  </View>
-                </Pressable>
-              ),
-            )}
-          </View>
-        )}
-      </ScrollView>
+                      <Text
+                        style={
+                          styles.fileSize
+                        }
+                      >
+                        {formatFileSize(
+                          attachment.size,
+                        )}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ),
+              )}
+            </View>
+          )}
+        </ScrollView>
 
-      <Modal
-        visible={
-          selectedAttachment !==
-          null
-        }
-        transparent
-        animationType="fade"
-        onRequestClose={() =>
-          setSelectedAttachment(
-            null,
-          )
-        }
-      >
-        <View
-          style={
-            styles.modalBackdrop
+        <Modal
+          visible={
+            selectedAttachment !==
+            null
+          }
+          transparent
+          animationType="fade"
+          onRequestClose={() =>
+            setSelectedAttachment(
+              null,
+            )
           }
         >
           <View
             style={
-              styles.modalContainer
+              styles.modalBackdrop
             }
           >
             <View
               style={
-                styles.modalHeader
+                styles.modalContainer
               }
             >
               <View
                 style={
-                  styles.modalHeaderText
+                  styles.modalHeader
                 }
               >
-                <Text
+                <View
                   style={
-                    styles.modalFileName
-                  }
-                  numberOfLines={
-                    1
+                    styles.modalHeaderText
                   }
                 >
-                  {
-                    selectedAttachment
-                      ?.fileName
-                  }
-                </Text>
-
-                {selectedAttachment && (
                   <Text
                     style={
-                      styles.modalFileSize
+                      styles.modalFileName
+                    }
+                    numberOfLines={
+                      1
                     }
                   >
-                    {formatFileSize(
-                      selectedAttachment.size,
-                    )}
+                    {
+                      selectedAttachment
+                        ?.fileName
+                    }
                   </Text>
-                )}
-              </View>
 
-              <Pressable
-                onPress={() =>
-                  setSelectedAttachment(
-                    null,
-                  )
-                }
-                style={({
-                  pressed,
-                }) => [
-                  styles.closeButton,
-
-                  pressed &&
-                    styles.pressed,
-                ]}
-              >
-                <Text
-                  style={
-                    styles.closeButtonText
-                  }
-                >
-                  ✕
-                </Text>
-              </Pressable>
-            </View>
-
-            {selectedAttachment && (
-              <Image
-                source={{
-                  uri:
-                    selectedAttachment.url,
-                }}
-                style={
-                  styles.fullImage
-                }
-                resizeMode="contain"
-              />
-            )}
-
-            <View
-              style={
-                styles.modalActions
-              }
-            >
-              <Pressable
-                disabled={
-                  isDeleting
-                }
-                onPress={() =>
-                  setSelectedAttachment(
-                    null,
-                  )
-                }
-                style={({
-                  pressed,
-                }) => [
-                  styles.cancelButton,
-
-                  pressed &&
-                    styles.pressed,
-                ]}
-              >
-                <Text
-                  style={
-                    styles.cancelButtonText
-                  }
-                >
-                  Zamknij
-                </Text>
-              </Pressable>
-
-              <Pressable
-                disabled={
-                  isDeleting
-                }
-                onPress={
-                  handleDeleteAttachment
-                }
-                style={({
-                  pressed,
-                }) => [
-                  styles.deleteButton,
-
-                  pressed &&
-                    styles.pressed,
-
-                  isDeleting &&
-                    styles.disabled,
-                ]}
-              >
-                {isDeleting ? (
-                  <View
-                    style={
-                      styles.uploadingRow
-                    }
-                  >
-                    <ActivityIndicator
-                      size="small"
-                      color="#FFFFFF"
-                    />
-
+                  {selectedAttachment && (
                     <Text
                       style={
-                        styles.deleteButtonText
+                        styles.modalFileSize
                       }
                     >
-                      Usuwanie...
+                      {formatFileSize(
+                        selectedAttachment.size,
+                      )}
                     </Text>
-                  </View>
-                ) : (
+                  )}
+                </View>
+
+                <Pressable
+                  onPress={() =>
+                    setSelectedAttachment(
+                      null,
+                    )
+                  }
+                  style={
+                    styles.closeButton
+                  }
+                >
                   <Text
                     style={
-                      styles.deleteButtonText
+                      styles.closeButtonText
                     }
                   >
-                    🗑 Usuń zdjęcie
+                    ✕
                   </Text>
-                )}
-              </Pressable>
+                </Pressable>
+              </View>
+
+              {selectedAttachment && (
+                <Image
+                  source={{
+                    uri:
+                      selectedAttachment.url,
+                  }}
+                  style={
+                    styles.fullImage
+                  }
+                  resizeMode="contain"
+                />
+              )}
+
+              <View
+                style={
+                  styles.modalActions
+                }
+              >
+                <Pressable
+                  disabled={
+                    isDeletingAttachment
+                  }
+                  onPress={() =>
+                    setSelectedAttachment(
+                      null,
+                    )
+                  }
+                  style={
+                    styles.modalCancelButton
+                  }
+                >
+                  <Text
+                    style={
+                      styles.modalCancelButtonText
+                    }
+                  >
+                    Zamknij
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  disabled={
+                    isDeletingAttachment
+                  }
+                  onPress={
+                    handleDeleteAttachment
+                  }
+                  style={[
+                    styles.modalDeleteButton,
+
+                    isDeletingAttachment &&
+                      styles.disabled,
+                  ]}
+                >
+                  {isDeletingAttachment ? (
+                    <ActivityIndicator
+                      color="#FFFFFF"
+                    />
+                  ) : (
+                    <Text
+                      style={
+                        styles.modalDeleteButtonText
+                      }
+                    >
+                      🗑 Usuń zdjęcie
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+        </Modal>
+      </SafeAreaView>
+    </>
   );
-}
-
-function formatFileSize(
-  bytes: number,
-) {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-
-  const kilobytes =
-    bytes / 1024;
-
-  if (
-    kilobytes < 1024
-  ) {
-    return `${kilobytes.toFixed(
-      1,
-    )} KB`;
-  }
-
-  const megabytes =
-    kilobytes / 1024;
-
-  return `${megabytes.toFixed(
-    1,
-  )} MB`;
 }
 
 const styles =
@@ -1386,13 +1582,16 @@ const styles =
       flex: 1,
       justifyContent:
         'center',
-      alignItems: 'center',
+      alignItems:
+        'center',
       padding: 24,
     },
 
     categoryRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
     },
 
     categoryIconBox: {
@@ -1404,58 +1603,109 @@ const styles =
       borderWidth: 1,
       borderColor:
         '#E5E7EB',
+      alignItems:
+        'center',
       justifyContent:
         'center',
-      alignItems: 'center',
-      marginRight: 14,
     },
 
     categoryIcon: {
-      fontSize: 30,
+      fontSize: 29,
+    },
+
+    categoryContent: {
+      flex: 1,
+      marginLeft: 14,
     },
 
     categoryLabel: {
-      fontSize: 13,
-      fontWeight: '700',
+      fontSize: 14,
+      fontWeight:
+        '600',
       color: '#6B7280',
       textTransform:
         'uppercase',
     },
 
     roomName: {
-      marginTop: 5,
+      marginTop: 4,
       fontSize: 14,
-      color: '#6B7280',
+      color: '#9CA3AF',
     },
 
     title: {
-      marginTop: 24,
+      marginTop: 22,
       fontSize: 30,
-      fontWeight: '700',
+      fontWeight:
+        '700',
       color: '#111827',
     },
 
     description: {
-      marginTop: 12,
+      marginTop: 10,
       fontSize: 16,
       lineHeight: 24,
-      color: '#4B5563',
+      color: '#6B7280',
+    },
+
+    entryActions: {
+      marginTop: 22,
+      flexDirection:
+        'row',
+      gap: 12,
+    },
+
+    editButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor:
+        '#D1D5DB',
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    editButtonText: {
+      color: '#111827',
+      fontWeight:
+        '600',
+    },
+
+    deleteEntryButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 10,
+      backgroundColor:
+        '#FEE2E2',
+    },
+
+    deleteEntryButtonText: {
+      color: '#B91C1C',
+      fontWeight:
+        '600',
     },
 
     divider: {
-      marginTop: 30,
+      marginVertical: 30,
       height: 1,
       backgroundColor:
         '#E5E7EB',
     },
 
     sectionHeader: {
-      marginTop: 30,
+      flexDirection:
+        'row',
+      justifyContent:
+        'space-between',
+      alignItems:
+        'center',
     },
 
     sectionTitle: {
       fontSize: 22,
-      fontWeight: '700',
+      fontWeight:
+        '700',
       color: '#111827',
     },
 
@@ -1467,8 +1717,10 @@ const styles =
 
     photoActions: {
       marginTop: 18,
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+      flexDirection:
+        'row',
+      flexWrap:
+        'wrap',
       gap: 12,
     },
 
@@ -1481,13 +1733,15 @@ const styles =
         '#111827',
       justifyContent:
         'center',
-      alignItems: 'center',
+      alignItems:
+        'center',
     },
 
     cameraButtonText: {
       color: '#FFFFFF',
       fontSize: 14,
-      fontWeight: '600',
+      fontWeight:
+        '600',
     },
 
     galleryButton: {
@@ -1502,19 +1756,23 @@ const styles =
         '#D1D5DB',
       justifyContent:
         'center',
-      alignItems: 'center',
+      alignItems:
+        'center',
     },
 
     galleryButtonText: {
       color: '#111827',
       fontSize: 14,
-      fontWeight: '600',
+      fontWeight:
+        '600',
     },
 
     uploadStatus: {
       marginTop: 16,
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
       gap: 10,
     },
 
@@ -1523,17 +1781,12 @@ const styles =
       fontSize: 14,
     },
 
-    uploadingRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-
     emptyState: {
       minHeight: 300,
       justifyContent:
         'center',
-      alignItems: 'center',
+      alignItems:
+        'center',
     },
 
     emptyIcon: {
@@ -1543,29 +1796,34 @@ const styles =
     emptyTitle: {
       marginTop: 14,
       fontSize: 19,
-      fontWeight: '600',
+      fontWeight:
+        '600',
       color: '#111827',
     },
 
     infoText: {
       marginTop: 8,
       maxWidth: 350,
-      textAlign: 'center',
+      textAlign:
+        'center',
       color: '#6B7280',
       lineHeight: 21,
     },
 
     gallery: {
       marginTop: 22,
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+      flexDirection:
+        'row',
+      flexWrap:
+        'wrap',
       gap: 16,
     },
 
     imageCard: {
       width: 240,
       borderRadius: 16,
-      overflow: 'hidden',
+      overflow:
+        'hidden',
       backgroundColor:
         '#FFFFFF',
       borderWidth: 1,
@@ -1586,7 +1844,8 @@ const styles =
 
     fileName: {
       fontSize: 13,
-      fontWeight: '500',
+      fontWeight:
+        '500',
       color: '#374151',
     },
 
@@ -1598,7 +1857,8 @@ const styles =
 
     errorTitle: {
       fontSize: 21,
-      fontWeight: '700',
+      fontWeight:
+        '700',
       color: '#B91C1C',
     },
 
@@ -1613,7 +1873,8 @@ const styles =
 
     retryButtonText: {
       color: '#FFFFFF',
-      fontWeight: '600',
+      fontWeight:
+        '600',
     },
 
     pressed: {
@@ -1630,7 +1891,8 @@ const styles =
         'rgba(0, 0, 0, 0.85)',
       justifyContent:
         'center',
-      alignItems: 'center',
+      alignItems:
+        'center',
       padding: 24,
     },
 
@@ -1641,34 +1903,35 @@ const styles =
       backgroundColor:
         '#111827',
       borderRadius: 18,
-      overflow: 'hidden',
+      overflow:
+        'hidden',
     },
 
     modalHeader: {
       minHeight: 68,
       paddingHorizontal: 20,
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
       justifyContent:
         'space-between',
-      borderBottomWidth: 1,
-      borderBottomColor:
-        '#374151',
     },
 
     modalHeaderText: {
       flex: 1,
-      marginRight: 16,
+      marginRight: 20,
     },
 
     modalFileName: {
       color: '#FFFFFF',
       fontSize: 15,
-      fontWeight: '600',
+      fontWeight:
+        '600',
     },
 
     modalFileSize: {
-      marginTop: 3,
+      marginTop: 4,
       color: '#9CA3AF',
       fontSize: 12,
     },
@@ -1679,62 +1942,69 @@ const styles =
       borderRadius: 21,
       backgroundColor:
         '#374151',
+      alignItems:
+        'center',
       justifyContent:
         'center',
-      alignItems: 'center',
     },
 
     closeButtonText: {
       color: '#FFFFFF',
-      fontSize: 18,
-      fontWeight: '600',
+      fontSize: 19,
+      fontWeight:
+        '700',
     },
 
     fullImage: {
       width: '100%',
-      height: 600,
+      height: 560,
       backgroundColor:
         '#000000',
     },
 
     modalActions: {
-      minHeight: 76,
-      padding: 16,
-      flexDirection: 'row',
+      padding: 18,
+      flexDirection:
+        'row',
       justifyContent:
         'flex-end',
-      alignItems: 'center',
       gap: 12,
-      borderTopWidth: 1,
-      borderTopColor:
-        '#374151',
     },
 
-    cancelButton: {
-      paddingHorizontal: 18,
-      paddingVertical: 12,
+    modalCancelButton: {
+      minHeight: 46,
+      paddingHorizontal: 20,
       borderRadius: 10,
-      backgroundColor:
-        '#374151',
+      borderWidth: 1,
+      borderColor:
+        '#4B5563',
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
     },
 
-    cancelButtonText: {
+    modalCancelButtonText: {
       color: '#FFFFFF',
-      fontWeight: '600',
+      fontWeight:
+        '600',
     },
 
-    deleteButton: {
-      minWidth: 150,
-      paddingHorizontal: 18,
-      paddingVertical: 12,
+    modalDeleteButton: {
+      minHeight: 46,
+      paddingHorizontal: 20,
       borderRadius: 10,
       backgroundColor:
         '#DC2626',
-      alignItems: 'center',
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
     },
 
-    deleteButtonText: {
+    modalDeleteButtonText: {
       color: '#FFFFFF',
-      fontWeight: '600',
+      fontWeight:
+        '600',
     },
   });

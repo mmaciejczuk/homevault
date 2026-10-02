@@ -38,63 +38,82 @@ function RootNavigator() {
 
   return (
     <Stack>
-      {/*
-       * Bez sesji pierwszym
-       * dostępnym ekranem musi
-       * być login.
-       */}
       <Stack.Protected
         guard={!session}
       >
         <Stack.Screen
           name="login"
           options={{
-            headerShown: false,
+            headerShown:
+              false,
           }}
         />
 
         <Stack.Screen
           name="forgot-password"
           options={{
-            headerShown: false,
+            title:
+              'Reset hasła',
+          }}
+        />
+
+        <Stack.Screen
+          name="auth/reset-password"
+          options={{
+            title:
+              'Nowe hasło',
+          }}
+        />
+
+        <Stack.Screen
+          name="auth/callback"
+          options={{
+            headerShown:
+              false,
           }}
         />
       </Stack.Protected>
 
-      {/*
-       * Po zalogowaniu pierwszym
-       * dostępnym ekranem jest index.
-       */}
       <Stack.Protected
         guard={!!session}
       >
         <Stack.Screen
           name="index"
           options={{
-            headerShown: false,
+            headerShown:
+              false,
           }}
         />
 
         <Stack.Screen
           name="account"
           options={{
-            headerShown: false,
+            title:
+              'Konto',
           }}
         />
 
         <Stack.Screen
           name="create-property"
           options={{
-            title: 'Dodaj dom',
-            headerBackTitle:
-              'Wróć',
+            title:
+              'Dodaj dom',
           }}
         />
 
         <Stack.Screen
           name="property/[id]"
           options={{
-            title: 'Dom',
+            title:
+              'Dom',
+          }}
+        />
+
+        <Stack.Screen
+          name="property/[id]/edit"
+          options={{
+            title:
+              'Edytuj dom',
           }}
         />
 
@@ -123,6 +142,14 @@ function RootNavigator() {
         />
 
         <Stack.Screen
+          name="room/[id]/edit"
+          options={{
+            title:
+              'Edytuj pomieszczenie',
+          }}
+        />
+
+        <Stack.Screen
           name="room/[id]/create-entry"
           options={{
             title:
@@ -133,30 +160,19 @@ function RootNavigator() {
         <Stack.Screen
           name="entry/[id]"
           options={{
-            title: 'Wpis',
+            title:
+              'Wpis',
+          }}
+        />
+
+        <Stack.Screen
+          name="entry/[id]/edit"
+          options={{
+            title:
+              'Edytuj wpis',
           }}
         />
       </Stack.Protected>
-
-      {/*
-       * Callbacki muszą być dostępne
-       * niezależnie od sesji,
-       * ale NIE mogą być pierwszymi
-       * trasami w Stacku.
-       */}
-      <Stack.Screen
-        name="auth/callback"
-        options={{
-          headerShown: false,
-        }}
-      />
-
-      <Stack.Screen
-        name="auth/reset-password"
-        options={{
-          headerShown: false,
-        }}
-      />
     </Stack>
   );
 }

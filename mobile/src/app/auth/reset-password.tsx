@@ -1,4 +1,7 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import {
+  router,
+  useLocalSearchParams,
+} from 'expo-router';
 
 import * as Linking from 'expo-linking';
 
@@ -57,7 +60,9 @@ function safeDecode(
   value: string,
 ): string {
   try {
-    return decodeURIComponent(value);
+    return decodeURIComponent(
+      value,
+    );
   } catch {
     return value;
   }
@@ -151,7 +156,8 @@ function mergeRecoveryData(
 function parseRecoveryUrl(
   url: string,
 ): RecoveryData {
-  let result: RecoveryData = {};
+  let result:
+    RecoveryData = {};
 
   const questionIndex =
     url.indexOf('?');
@@ -159,15 +165,19 @@ function parseRecoveryUrl(
   const hashIndex =
     url.indexOf('#');
 
-  if (questionIndex >= 0) {
+  if (
+    questionIndex >= 0
+  ) {
     const queryEnd =
-      hashIndex > questionIndex
+      hashIndex >
+      questionIndex
         ? hashIndex
         : url.length;
 
     result =
       mergeRecoveryData(
         result,
+
         parseParameters(
           url.slice(
             questionIndex + 1,
@@ -177,10 +187,13 @@ function parseRecoveryUrl(
       );
   }
 
-  if (hashIndex >= 0) {
+  if (
+    hashIndex >= 0
+  ) {
     result =
       mergeRecoveryData(
         result,
+
         parseParameters(
           url.slice(
             hashIndex + 1,
@@ -212,67 +225,113 @@ export default function ResetPasswordScreen() {
 
   const routeParams =
     useLocalSearchParams<{
-      code?: string | string[];
-      access_token?: string | string[];
-      refresh_token?: string | string[];
-      token_hash?: string | string[];
-      type?: string | string[];
-      error?: string | string[];
-      error_description?: string | string[];
-      error_code?: string | string[];
+      code?:
+        | string
+        | string[];
+
+      access_token?:
+        | string
+        | string[];
+
+      refresh_token?:
+        | string
+        | string[];
+
+      token_hash?:
+        | string
+        | string[];
+
+      type?:
+        | string
+        | string[];
+
+      error?:
+        | string
+        | string[];
+
+      error_description?:
+        | string
+        | string[];
+
+      error_code?:
+        | string
+        | string[];
     }>();
 
   const [
     password,
     setPassword,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     confirmPassword,
     setConfirmPassword,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     isPreparing,
     setIsPreparing,
-  ] = useState(true);
+  ] =
+    useState(true);
 
   const [
     isSaving,
     setIsSaving,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const [
     recoveryReady,
     setRecoveryReady,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const [
     errorMessage,
     setErrorMessage,
   ] =
-    useState<string | null>(
-      null,
-    );
+    useState<
+      string | null
+    >(null);
 
   const recoveryUserIdRef =
-    useRef<string | null>(
-      null,
-    );
+    useRef<
+      string | null
+    >(null);
 
   const processingRef =
     useRef(false);
 
   const processedValueRef =
-    useRef<string | null>(
-      null,
-    );
+    useRef<
+      string | null
+    >(null);
+
+  /*
+   * Kluczowy fix:
+   *
+   * po udanej zmianie hasła
+   * nie pozwalamy już ponownie
+   * przetwarzać tego samego
+   * recovery linku.
+   */
+  const resetCompletedRef =
+    useRef(false);
 
   useEffect(() => {
     let mounted = true;
 
     const markRecoveryReady =
       async () => {
+        if (
+          resetCompletedRef
+            .current
+        ) {
+          return;
+        }
+
         const {
           data: {
             user,
@@ -295,7 +354,11 @@ export default function ResetPasswordScreen() {
         recoveryUserIdRef.current =
           user.id;
 
-        if (!mounted) {
+        if (
+          !mounted ||
+          resetCompletedRef
+            .current
+        ) {
           return;
         }
 
@@ -314,8 +377,21 @@ export default function ResetPasswordScreen() {
 
     const processRecoveryData =
       async (
-        data: RecoveryData,
+        data:
+          RecoveryData,
       ) => {
+        /*
+         * Nie przetwarzamy linku
+         * po poprawnej zmianie
+         * hasła.
+         */
+        if (
+          resetCompletedRef
+            .current
+        ) {
+          return;
+        }
+
         if (
           processingRef.current
         ) {
@@ -326,6 +402,13 @@ export default function ResetPasswordScreen() {
           true;
 
         try {
+          if (
+            resetCompletedRef
+              .current
+          ) {
+            return;
+          }
+
           if (mounted) {
             setIsPreparing(
               true,
@@ -340,10 +423,6 @@ export default function ResetPasswordScreen() {
             );
           }
 
-          /*
-           * Supabase może zwrócić błąd
-           * w query albo hash fragment.
-           */
           if (data.error) {
             throw new Error(
               safeDecode(
@@ -353,7 +432,7 @@ export default function ResetPasswordScreen() {
           }
 
           /*
-           * FLOW 1:
+           * FLOW 1
            *
            * PKCE
            *
@@ -364,6 +443,7 @@ export default function ResetPasswordScreen() {
             const {
               data:
                 exchangeData,
+
               error:
                 exchangeError,
             } =
@@ -372,7 +452,16 @@ export default function ResetPasswordScreen() {
                   data.code,
                 );
 
-            if (exchangeError) {
+            if (
+              resetCompletedRef
+                .current
+            ) {
+              return;
+            }
+
+            if (
+              exchangeError
+            ) {
               throw exchangeError;
             }
 
@@ -390,7 +479,7 @@ export default function ResetPasswordScreen() {
           }
 
           /*
-           * FLOW 2:
+           * FLOW 2
            *
            * token_hash
            *
@@ -398,7 +487,9 @@ export default function ResetPasswordScreen() {
            * ?token_hash=...
            * &type=recovery
            */
-          if (data.tokenHash) {
+          if (
+            data.tokenHash
+          ) {
             if (
               data.type &&
               data.type !==
@@ -412,6 +503,7 @@ export default function ResetPasswordScreen() {
             const {
               data:
                 verifyData,
+
               error:
                 verifyError,
             } =
@@ -424,7 +516,16 @@ export default function ResetPasswordScreen() {
                     'recovery',
                 });
 
-            if (verifyError) {
+            if (
+              resetCompletedRef
+                .current
+            ) {
+              return;
+            }
+
+            if (
+              verifyError
+            ) {
               throw verifyError;
             }
 
@@ -442,14 +543,12 @@ export default function ResetPasswordScreen() {
           }
 
           /*
-           * FLOW 3:
+           * FLOW 3
            *
            * Implicit flow
            *
-           * homevault://auth/reset-password
            * #access_token=...
            * &refresh_token=...
-           * &type=recovery
            */
           if (
             data.accessToken &&
@@ -468,6 +567,7 @@ export default function ResetPasswordScreen() {
             const {
               data:
                 sessionData,
+
               error:
                 sessionError,
             } =
@@ -480,7 +580,16 @@ export default function ResetPasswordScreen() {
                     data.refreshToken,
                 });
 
-            if (sessionError) {
+            if (
+              resetCompletedRef
+                .current
+            ) {
+              return;
+            }
+
+            if (
+              sessionError
+            ) {
               throw sessionError;
             }
 
@@ -501,6 +610,20 @@ export default function ResetPasswordScreen() {
             'Nie udało się odczytać danych recovery z linku. Wyślij nowy link resetujący hasło.',
           );
         } catch (error) {
+          /*
+           * Jeżeli hasło zostało już
+           * poprawnie zmienione,
+           * ignorujemy wszelkie
+           * późniejsze błędy starego
+           * recovery linku.
+           */
+          if (
+            resetCompletedRef
+              .current
+          ) {
+            return;
+          }
+
           console.error(
             'Błąd linku resetowania hasła:',
             error,
@@ -518,7 +641,8 @@ export default function ResetPasswordScreen() {
           );
 
           setErrorMessage(
-            error instanceof Error
+            error instanceof
+              Error
               ? error.message
               : 'Nie udało się zweryfikować linku resetującego hasło.',
           );
@@ -534,20 +658,25 @@ export default function ResetPasswordScreen() {
 
     const initialize =
       async () => {
+        /*
+         * Po sukcesie nie uruchamiamy
+         * inicjalizacji ponownie.
+         */
+        if (
+          resetCompletedRef
+            .current
+        ) {
+          return;
+        }
+
         try {
-          /*
-           * Najważniejsze źródło:
-           * pełny URL przekazany przez OS.
-           *
-           * useLinkingURL obsługuje zarówno
-           * cold start, jak i kolejne linki.
-           */
           if (linkingUrl) {
             const marker =
               `url:${linkingUrl}`;
 
             if (
-              processedValueRef.current !==
+              processedValueRef
+                .current !==
               marker
             ) {
               const urlData =
@@ -572,14 +701,6 @@ export default function ResetPasswordScreen() {
             }
           }
 
-          /*
-           * Fallback:
-           *
-           * Expo Router potrafi zachować
-           * query parameters nawet wtedy,
-           * kiedy pełny URL nie jest już
-           * dostępny.
-           */
           const routerData:
             RecoveryData = {
             code:
@@ -635,7 +756,8 @@ export default function ResetPasswordScreen() {
               );
 
             if (
-              processedValueRef.current !==
+              processedValueRef
+                .current !==
               marker
             ) {
               processedValueRef.current =
@@ -650,24 +772,51 @@ export default function ResetPasswordScreen() {
           }
 
           /*
-           * Nie używamy tu getSession()
-           * jako fallbacku.
-           *
-           * Zwykła aktywna sesja
-           * nie oznacza, że użytkownik
-           * wszedł przez recovery link.
+           * Jeżeli już wcześniej
+           * przygotowaliśmy recovery,
+           * nie zgłaszamy ponownie
+           * błędu tylko dlatego,
+           * że effect się wykonał.
            */
+          if (
+            recoveryUserIdRef
+              .current
+          ) {
+            if (mounted) {
+              setRecoveryReady(
+                true,
+              );
+
+              setIsPreparing(
+                false,
+              );
+            }
+
+            return;
+          }
+
           throw new Error(
             'Nie udało się odczytać danych recovery z linku. Wyślij nowy link resetujący hasło.',
           );
         } catch (error) {
+          if (
+            resetCompletedRef
+              .current
+          ) {
+            return;
+          }
+
           console.error(
             'Błąd przygotowania resetu hasła:',
             error,
           );
 
-          recoveryUserIdRef.current =
-            null;
+          if (
+            recoveryUserIdRef
+              .current
+          ) {
+            return;
+          }
 
           if (!mounted) {
             return;
@@ -678,7 +827,8 @@ export default function ResetPasswordScreen() {
           );
 
           setErrorMessage(
-            error instanceof Error
+            error instanceof
+              Error
               ? error.message
               : 'Nie udało się zweryfikować linku.',
           );
@@ -744,17 +894,25 @@ export default function ResetPasswordScreen() {
 
       Alert.alert(
         'Hasło zmienione',
+
         'Możesz teraz zalogować się nowym hasłem.',
+
         [
           {
             text: 'OK',
 
-            onPress: () =>
-              router.replace(
-                '/login',
-              ),
+            onPress:
+              () =>
+                router.replace(
+                  '/login',
+                ),
           },
         ],
+
+        {
+          cancelable:
+            false,
+        },
       );
     };
 
@@ -767,6 +925,7 @@ export default function ResetPasswordScreen() {
       ) {
         showError(
           'Brak sesji recovery',
+
           'Wyślij nowy link resetujący hasło.',
         );
 
@@ -774,10 +933,12 @@ export default function ResetPasswordScreen() {
       }
 
       if (
-        password.length < 6
+        password.length <
+        6
       ) {
         showError(
           'Hasło jest za krótkie',
+
           'Hasło powinno mieć co najmniej 6 znaków.',
         );
 
@@ -790,6 +951,7 @@ export default function ResetPasswordScreen() {
       ) {
         showError(
           'Hasła są różne',
+
           'Wpisz takie samo hasło w obu polach.',
         );
 
@@ -801,17 +963,12 @@ export default function ResetPasswordScreen() {
           true,
         );
 
-        /*
-         * Jeszcze raz sprawdzamy,
-         * czy aktualna sesja należy
-         * do użytkownika utworzonego
-         * z recovery linka.
-         */
         const {
           data: {
             user:
               currentUser,
           },
+
           error:
             userError,
         } =
@@ -858,19 +1015,33 @@ export default function ResetPasswordScreen() {
         }
 
         /*
-         * Po poprawnej zmianie hasła
-         * usuwamy lokalną sesję recovery.
+         * KLUCZOWY FIX:
+         *
+         * od tego momentu stary
+         * recovery link jest zużyty.
+         *
+         * Zanim wykonamy signOut,
+         * oznaczamy proces jako
+         * zakończony, żeby effect
+         * nie próbował ponownie
+         * użyć starego tokenu.
          */
+        resetCompletedRef.current =
+          true;
+
         const {
           error:
             signOutError,
         } =
           await supabase.auth
             .signOut({
-              scope: 'local',
+              scope:
+                'local',
             });
 
-        if (signOutError) {
+        if (
+          signOutError
+        ) {
           console.warn(
             'Hasło zmienione, ale nie udało się usunąć lokalnej sesji:',
             signOutError,
@@ -880,9 +1051,16 @@ export default function ResetPasswordScreen() {
         recoveryUserIdRef.current =
           null;
 
-        setRecoveryReady(
-          false,
-        );
+        /*
+         * NIE robimy tutaj:
+         *
+         * setRecoveryReady(false)
+         *
+         * ponieważ spowodowałoby
+         * wyrenderowanie ekranu
+         * "Link jest nieprawidłowy"
+         * pod alertem sukcesu.
+         */
 
         showSuccess();
       } catch (error) {
@@ -893,7 +1071,9 @@ export default function ResetPasswordScreen() {
 
         showError(
           'Nie udało się zmienić hasła',
-          error instanceof Error
+
+          error instanceof
+            Error
             ? error.message
             : 'Spróbuj ponownie.',
         );
@@ -998,7 +1178,8 @@ export default function ResetPasswordScreen() {
           styles.container
         }
         behavior={
-          Platform.OS === 'ios'
+          Platform.OS ===
+          'ios'
             ? 'padding'
             : undefined
         }

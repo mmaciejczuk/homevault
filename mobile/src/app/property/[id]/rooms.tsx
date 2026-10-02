@@ -1,5 +1,6 @@
 import {
   router,
+  Stack,
   useFocusEffect,
   useLocalSearchParams,
 } from 'expo-router';
@@ -22,203 +23,394 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
-import { apiFetch } from '../../../lib/api';
+import {
+  apiFetch,
+} from '../../../lib/api';
+
+interface Property {
+  id: number;
+  name: string;
+}
 
 interface Room {
   id: number;
   name: string;
-  floor?: string;
-  description?: string;
+  floor?: string | null;
+  description?: string | null;
   propertyId: number;
 }
 
 export default function RoomsScreen() {
   const { id } =
-    useLocalSearchParams<{ id: string }>();
+    useLocalSearchParams<{
+      id: string;
+    }>();
 
-  const [rooms, setRooms] =
+  const [
+    property,
+    setProperty,
+  ] =
+    useState<Property | null>(
+      null,
+    );
+
+  const [
+    rooms,
+    setRooms,
+  ] =
     useState<Room[]>([]);
 
-  const [isLoading, setIsLoading] =
+  const [
+    isLoading,
+    setIsLoading,
+  ] =
     useState(true);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string | null
+    >(null);
 
-  const loadRooms =
-    useCallback(async () => {
-      if (!id) {
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const response =
-          await apiFetch(
-            `/properties/${id}/rooms`,
-          );
-
-        if (!response.ok) {
-          const responseBody =
-            await response.text();
-
-          throw new Error(
-            `API zwróciło status ${response.status}: ${responseBody}`,
-          );
+  const loadData =
+    useCallback(
+      async () => {
+        if (!id) {
+          return;
         }
 
-        const data: Room[] =
-          await response.json();
+        try {
+          setIsLoading(
+            true,
+          );
 
-        setRooms(data);
-      } catch (err) {
-        console.error(
-          'Błąd pobierania pomieszczeń:',
-          err,
-        );
+          setError(
+            null,
+          );
 
-        setError(
-          'Nie udało się pobrać pomieszczeń.',
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    }, [id]);
+          const [
+            propertyResponse,
+            roomsResponse,
+          ] =
+            await Promise.all([
+              apiFetch(
+                `/properties/${id}`,
+              ),
+
+              apiFetch(
+                `/properties/${id}/rooms`,
+              ),
+            ]);
+
+          if (
+            !propertyResponse.ok
+          ) {
+            const body =
+              await propertyResponse.text();
+
+            throw new Error(
+              `Property API ${propertyResponse.status}: ${body}`,
+            );
+          }
+
+          if (
+            !roomsResponse.ok
+          ) {
+            const body =
+              await roomsResponse.text();
+
+            throw new Error(
+              `Rooms API ${roomsResponse.status}: ${body}`,
+            );
+          }
+
+          const propertyData:
+            Property =
+            await propertyResponse.json();
+
+          const roomsData:
+            Room[] =
+            await roomsResponse.json();
+
+          setProperty(
+            propertyData,
+          );
+
+          setRooms(
+            roomsData,
+          );
+        } catch (err) {
+          console.error(
+            'Błąd pobierania pomieszczeń:',
+            err,
+          );
+
+          setError(
+            'Nie udało się pobrać pomieszczeń.',
+          );
+        } finally {
+          setIsLoading(
+            false,
+          );
+        }
+      },
+      [id],
+    );
 
   useFocusEffect(
     useCallback(() => {
-      loadRooms();
-    }, [loadRooms]),
+      void loadData();
+    }, [loadData]),
   );
 
-  const handleAddRoom = () => {
-    router.push({
-      pathname:
-        '/property/[id]/create-room',
+  const handleAddRoom =
+    () => {
+      router.push({
+        pathname:
+          '/property/[id]/create-room',
 
-      params: {
-        id,
-      },
-    });
-  };
+        params: {
+          id,
+        },
+      });
+    };
 
-  return (
-    <SafeAreaView
-      style={styles.container}
-      edges={['bottom']}
-    >
-      <ScrollView
-        contentContainerStyle={
-          styles.content
-        }
-      >
-        <View style={styles.titleRow}>
-          <View>
-            <Text style={styles.title}>
-              Pomieszczenia
-            </Text>
+  const handleOpenRoom =
+    (
+      roomId: number,
+    ) => {
+      router.push({
+        pathname:
+          '/room/[id]',
 
-            <Text
-              style={styles.subtitle}
-            >
-              Zarządzaj pomieszczeniami
-              w domu
-            </Text>
-          </View>
+        params: {
+          id:
+            roomId.toString(),
+        },
+      });
+    };
 
-          {rooms.length > 0 && (
-            <Pressable
-              onPress={handleAddRoom}
-              style={({ pressed }) => [
-                styles.smallButton,
-                pressed &&
-                  styles.pressed,
-              ]}
-            >
-              <Text
-                style={
-                  styles.smallButtonText
-                }
-              >
-                + Dodaj
-              </Text>
-            </Pressable>
-          )}
-        </View>
+  if (isLoading) {
+    return (
+      <>
+        <Stack.Screen
+          options={{
+            title:
+              'Pomieszczenia',
+          }}
+        />
 
-        {isLoading && (
-          <View style={styles.center}>
+        <SafeAreaView
+          style={
+            styles.container
+          }
+          edges={['bottom']}
+        >
+          <View
+            style={
+              styles.center
+            }
+          >
             <ActivityIndicator
               size="large"
             />
 
             <Text
-              style={styles.infoText}
+              style={
+                styles.infoText
+              }
             >
               Pobieranie pomieszczeń...
             </Text>
           </View>
-        )}
+        </SafeAreaView>
+      </>
+    );
+  }
 
-        {!isLoading && error && (
-          <View style={styles.center}>
+  if (error) {
+    return (
+      <>
+        <Stack.Screen
+          options={{
+            title:
+              property
+                ? `${property.name} › Pomieszczenia`
+                : 'Pomieszczenia',
+          }}
+        />
+
+        <SafeAreaView
+          style={
+            styles.container
+          }
+          edges={['bottom']}
+        >
+          <View
+            style={
+              styles.center
+            }
+          >
             <Text
-              style={styles.errorTitle}
+              style={
+                styles.errorTitle
+              }
             >
               Wystąpił błąd
             </Text>
 
             <Text
-              style={styles.infoText}
+              style={
+                styles.infoText
+              }
             >
               {error}
             </Text>
 
             <Pressable
-              onPress={loadRooms}
-              style={styles.button}
+              onPress={
+                loadData
+              }
+              style={
+                styles.button
+              }
             >
               <Text
-                style={styles.buttonText}
+                style={
+                  styles.buttonText
+                }
               >
                 Spróbuj ponownie
               </Text>
             </Pressable>
           </View>
-        )}
+        </SafeAreaView>
+      </>
+    );
+  }
 
-        {!isLoading &&
-          !error &&
-          rooms.length === 0 && (
+  return (
+    <>
+      <Stack.Screen
+        options={{
+          title:
+            property
+              ? `${property.name} › Pomieszczenia`
+              : 'Pomieszczenia',
+        }}
+      />
+
+      <SafeAreaView
+        style={
+          styles.container
+        }
+        edges={['bottom']}
+      >
+        <ScrollView
+          contentContainerStyle={
+            styles.content
+          }
+        >
+          <View
+            style={
+              styles.headerRow
+            }
+          >
             <View
-              style={styles.center}
+              style={
+                styles.headerContent
+              }
             >
               <Text
-                style={styles.emptyIcon}
+                style={
+                  styles.title
+                }
+              >
+                Pomieszczenia
+              </Text>
+
+              {property && (
+                <Text
+                  style={
+                    styles.subtitle
+                  }
+                >
+                  🏠{' '}
+                  {property.name}
+                </Text>
+              )}
+            </View>
+
+            {rooms.length >
+              0 && (
+              <Pressable
+                onPress={
+                  handleAddRoom
+                }
+                style={({
+                  pressed,
+                }) => [
+                  styles.smallButton,
+
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.smallButtonText
+                  }
+                >
+                  + Dodaj
+                </Text>
+              </Pressable>
+            )}
+          </View>
+
+          {rooms.length ===
+          0 ? (
+            <View
+              style={
+                styles.emptyState
+              }
+            >
+              <Text
+                style={
+                  styles.emptyIcon
+                }
               >
                 🚪
               </Text>
 
               <Text
-                style={styles.emptyTitle}
+                style={
+                  styles.emptyTitle
+                }
               >
                 Brak pomieszczeń
               </Text>
 
               <Text
-                style={styles.infoText}
+                style={
+                  styles.infoText
+                }
               >
                 Dodaj pierwsze
-                pomieszczenie, np. salon,
-                kuchnię lub kotłownię.
+                pomieszczenie do
+                tego domu.
               </Text>
 
               <Pressable
-                onPress={handleAddRoom}
-                style={({ pressed }) => [
+                onPress={
+                  handleAddRoom
+                }
+                style={({
+                  pressed,
+                }) => [
                   styles.button,
+
                   pressed &&
                     styles.pressed,
                 ]}
@@ -232,235 +424,287 @@ export default function RoomsScreen() {
                 </Text>
               </Pressable>
             </View>
-          )}
-
-        {!isLoading &&
-          !error &&
-          rooms.length > 0 && (
-            <View style={styles.list}>
-              {rooms.map((room) => (
-                <Pressable
-                  key={room.id}
-                  style={({
-                    pressed,
-                  }) => [
-                    styles.card,
-                    pressed &&
-                      styles.pressed,
-                  ]}
-                  onPress={() => {
-                    router.push({
-                      pathname:
-                        '/room/[id]',
-                      params: {
-                        id: room.id.toString(),
-                      },
-                    });
-                  }}
-                >
-                  <View
-                    style={
-                      styles.iconContainer
+          ) : (
+            <View
+              style={
+                styles.list
+              }
+            >
+              {rooms.map(
+                (
+                  room,
+                ) => (
+                  <Pressable
+                    key={
+                      room.id
                     }
-                  >
-                    <Text
-                      style={styles.icon}
-                    >
-                      🚪
-                    </Text>
-                  </View>
-
-                  <View
-                    style={
-                      styles.roomInfo
+                    onPress={() =>
+                      handleOpenRoom(
+                        room.id,
+                      )
                     }
+                    style={({
+                      pressed,
+                    }) => [
+                      styles.card,
+
+                      pressed &&
+                        styles.pressed,
+                    ]}
                   >
-                    <Text
+                    <View
                       style={
-                        styles.roomName
+                        styles.iconContainer
                       }
                     >
-                      {room.name}
+                      <Text
+                        style={
+                          styles.icon
+                        }
+                      >
+                        🚪
+                      </Text>
+                    </View>
+
+                    <View
+                      style={
+                        styles.roomInfo
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.roomName
+                        }
+                      >
+                        {room.name}
+                      </Text>
+
+                      {room.floor && (
+                        <Text
+                          style={
+                            styles.detail
+                          }
+                        >
+                          {
+                            room.floor
+                          }
+                        </Text>
+                      )}
+
+                      {room.description && (
+                        <Text
+                          style={
+                            styles.description
+                          }
+                          numberOfLines={
+                            2
+                          }
+                        >
+                          {
+                            room.description
+                          }
+                        </Text>
+                      )}
+                    </View>
+
+                    <Text
+                      style={
+                        styles.arrow
+                      }
+                    >
+                      ›
                     </Text>
-
-                    {room.floor && (
-                      <Text
-                        style={
-                          styles.detail
-                        }
-                      >
-                        {room.floor}
-                      </Text>
-                    )}
-
-                    {room.description && (
-                      <Text
-                        style={
-                          styles.description
-                        }
-                      >
-                        {
-                          room.description
-                        }
-                      </Text>
-                    )}
-                  </View>
-
-                  <Text
-                    style={styles.arrow}
-                  >
-                    ›
-                  </Text>
-                </Pressable>
-              ))}
+                  </Pressable>
+                ),
+              )}
             </View>
           )}
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F7F8FA',
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        '#F7F8FA',
+    },
 
-  content: {
-    flexGrow: 1,
-    padding: 24,
-  },
+    content: {
+      padding: 24,
+      paddingBottom: 60,
+    },
 
-  titleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+    center: {
+      flex: 1,
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
+      padding: 24,
+    },
 
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-  },
+    headerRow: {
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+      justifyContent:
+        'space-between',
+      gap: 16,
+    },
 
-  subtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    color: '#6B7280',
-  },
+    headerContent: {
+      flex: 1,
+    },
 
-  center: {
-    minHeight: 500,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    title: {
+      fontSize: 30,
+      fontWeight:
+        '700',
+      color: '#111827',
+    },
 
-  emptyIcon: {
-    fontSize: 60,
-    marginBottom: 20,
-  },
+    subtitle: {
+      marginTop: 7,
+      fontSize: 15,
+      color: '#6B7280',
+    },
 
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#111827',
-  },
+    emptyState: {
+      minHeight: 470,
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
+    },
 
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#B91C1C',
-  },
+    emptyIcon: {
+      fontSize: 58,
+    },
 
-  infoText: {
-    marginTop: 8,
-    maxWidth: 340,
-    textAlign: 'center',
-    color: '#6B7280',
-    lineHeight: 21,
-  },
+    emptyTitle: {
+      marginTop: 16,
+      fontSize: 20,
+      fontWeight:
+        '600',
+      color: '#111827',
+    },
 
-  button: {
-    marginTop: 24,
-    backgroundColor: '#111827',
-    paddingHorizontal: 24,
-    paddingVertical: 15,
-    borderRadius: 12,
-  },
+    infoText: {
+      marginTop: 8,
+      maxWidth: 360,
+      textAlign:
+        'center',
+      color: '#6B7280',
+      lineHeight: 21,
+    },
 
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 15,
-  },
+    errorTitle: {
+      fontSize: 20,
+      fontWeight:
+        '700',
+      color: '#B91C1C',
+    },
 
-  smallButton: {
-    backgroundColor: '#111827',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
+    button: {
+      marginTop: 24,
+      paddingHorizontal: 24,
+      paddingVertical: 15,
+      borderRadius: 12,
+      backgroundColor:
+        '#111827',
+    },
 
-  smallButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
+    buttonText: {
+      color: '#FFFFFF',
+      fontSize: 15,
+      fontWeight:
+        '600',
+    },
 
-  pressed: {
-    opacity: 0.7,
-  },
+    smallButton: {
+      backgroundColor:
+        '#111827',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 10,
+    },
 
-  list: {
-    marginTop: 24,
-    gap: 14,
-  },
+    smallButtonText: {
+      color: '#FFFFFF',
+      fontWeight:
+        '600',
+    },
 
-  card: {
-    backgroundColor: '#FFFFFF',
-    padding: 18,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+    pressed: {
+      opacity: 0.7,
+    },
 
-  iconContainer: {
-    width: 54,
-    height: 54,
-    borderRadius: 14,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    list: {
+      marginTop: 24,
+      gap: 14,
+    },
 
-  icon: {
-    fontSize: 28,
-  },
+    card: {
+      backgroundColor:
+        '#FFFFFF',
+      padding: 18,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor:
+        '#E5E7EB',
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+    },
 
-  roomInfo: {
-    flex: 1,
-    marginLeft: 16,
-  },
+    iconContainer: {
+      width: 54,
+      height: 54,
+      borderRadius: 14,
+      backgroundColor:
+        '#F3F4F6',
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
 
-  roomName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-  },
+    icon: {
+      fontSize: 28,
+    },
 
-  detail: {
-    marginTop: 5,
-    color: '#6B7280',
-  },
+    roomInfo: {
+      flex: 1,
+      marginLeft: 16,
+    },
 
-  description: {
-    marginTop: 5,
-    color: '#9CA3AF',
-  },
+    roomName: {
+      fontSize: 18,
+      fontWeight:
+        '600',
+      color: '#111827',
+    },
 
-  arrow: {
-    fontSize: 30,
-    color: '#9CA3AF',
-  },
-});
+    detail: {
+      marginTop: 5,
+      color: '#6B7280',
+    },
+
+    description: {
+      marginTop: 5,
+      color: '#9CA3AF',
+      lineHeight: 19,
+    },
+
+    arrow: {
+      marginLeft: 12,
+      fontSize: 30,
+      color: '#9CA3AF',
+    },
+  });

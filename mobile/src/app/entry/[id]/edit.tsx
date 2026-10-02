@@ -1,5 +1,6 @@
 import {
   router,
+  Stack,
   useLocalSearchParams,
 } from 'expo-router';
 
@@ -43,54 +44,94 @@ interface Entry {
   title: string;
   description?: string | null;
   category: EntryCategory;
+  roomId: number;
 }
 
-const categories: {
+interface Property {
+  id: number;
+  name: string;
+}
+
+interface Room {
+  id: number;
+  name: string;
+  propertyId: number;
+  property?: Property;
+}
+
+interface CategoryOption {
   value: EntryCategory;
   label: string;
   icon: string;
-}[] = [
-  {
-    value: 'ELECTRICAL',
-    label: 'Elektryka',
-    icon: '⚡',
-  },
-  {
-    value: 'PLUMBING',
-    label: 'Hydraulika',
-    icon: '💧',
-  },
-  {
-    value: 'HEATING',
-    label: 'Ogrzewanie',
-    icon: '🔥',
-  },
-  {
-    value: 'WALL',
-    label: 'Ściany',
-    icon: '🧱',
-  },
-  {
-    value: 'FLOOR',
-    label: 'Podłoga',
-    icon: '🪵',
-  },
-  {
-    value: 'DEVICE',
-    label: 'Urządzenie',
-    icon: '🔧',
-  },
-  {
-    value: 'NOTE',
-    label: 'Notatka',
-    icon: '📝',
-  },
-  {
-    value: 'OTHER',
-    label: 'Inne',
-    icon: '📌',
-  },
-];
+}
+
+const categories:
+  CategoryOption[] = [
+    {
+      value:
+        'ELECTRICAL',
+      label:
+        'Elektryka',
+      icon:
+        '⚡',
+    },
+    {
+      value:
+        'PLUMBING',
+      label:
+        'Hydraulika',
+      icon:
+        '💧',
+    },
+    {
+      value:
+        'HEATING',
+      label:
+        'Ogrzewanie',
+      icon:
+        '🔥',
+    },
+    {
+      value:
+        'WALL',
+      label:
+        'Ściany',
+      icon:
+        '🧱',
+    },
+    {
+      value:
+        'FLOOR',
+      label:
+        'Podłoga',
+      icon:
+        '🪵',
+    },
+    {
+      value:
+        'DEVICE',
+      label:
+        'Urządzenie',
+      icon:
+        '🔧',
+    },
+    {
+      value:
+        'NOTE',
+      label:
+        'Notatka',
+      icon:
+        '📝',
+    },
+    {
+      value:
+        'OTHER',
+      label:
+        'Inne',
+      icon:
+        '📌',
+    },
+  ];
 
 export default function EditEntryScreen() {
   const { id } =
@@ -98,8 +139,26 @@ export default function EditEntryScreen() {
       id: string;
     }>();
 
-  const [title, setTitle] =
-    useState('');
+  const [
+    entry,
+    setEntry,
+  ] =
+    useState<Entry | null>(
+      null,
+    );
+
+  const [
+    room,
+    setRoom,
+  ] =
+    useState<Room | null>(
+      null,
+    );
+
+  const [
+    title,
+    setTitle,
+  ] = useState('');
 
   const [
     description,
@@ -111,20 +170,34 @@ export default function EditEntryScreen() {
     setCategory,
   ] =
     useState<EntryCategory>(
-      'OTHER',
+      'ELECTRICAL',
     );
 
-  const [isLoading, setIsLoading] =
-    useState(true);
+  const [
+    isLoading,
+    setIsLoading,
+  ] = useState(true);
 
-  const [isSaving, setIsSaving] =
-    useState(false);
+  const [
+    isSaving,
+    setIsSaving,
+  ] = useState(false);
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<string | null>(
+      null,
+    );
 
   const showMessage = (
     titleText: string,
     message: string,
   ) => {
-    if (Platform.OS === 'web') {
+    if (
+      Platform.OS === 'web'
+    ) {
       window.alert(
         `${titleText}\n\n${message}`,
       );
@@ -139,17 +212,149 @@ export default function EditEntryScreen() {
   };
 
   useEffect(() => {
-    const load = async () => {
+    const loadEntry =
+      async () => {
+        if (!id) {
+          setError(
+            'Brak identyfikatora wpisu.',
+          );
+
+          setIsLoading(
+            false,
+          );
+
+          return;
+        }
+
+        try {
+          setIsLoading(
+            true,
+          );
+
+          setError(
+            null,
+          );
+
+          const entryResponse =
+            await apiFetch(
+              `/entries/${id}`,
+            );
+
+          if (
+            !entryResponse.ok
+          ) {
+            throw new Error(
+              await entryResponse.text(),
+            );
+          }
+
+          const entryData:
+            Entry =
+            await entryResponse.json();
+
+          const roomResponse =
+            await apiFetch(
+              `/rooms/${entryData.roomId}`,
+            );
+
+          if (
+            !roomResponse.ok
+          ) {
+            throw new Error(
+              await roomResponse.text(),
+            );
+          }
+
+          const roomData:
+            Room =
+            await roomResponse.json();
+
+          setEntry(
+            entryData,
+          );
+
+          setRoom(
+            roomData,
+          );
+
+          setTitle(
+            entryData.title,
+          );
+
+          setDescription(
+            entryData.description ??
+              '',
+          );
+
+          setCategory(
+            entryData.category,
+          );
+        } catch (err) {
+          console.error(
+            'Błąd pobierania wpisu:',
+            err,
+          );
+
+          setError(
+            'Nie udało się pobrać wpisu.',
+          );
+        } finally {
+          setIsLoading(
+            false,
+          );
+        }
+      };
+
+    void loadEntry();
+  }, [id]);
+
+  const handleSave =
+    async () => {
       if (!id) {
         return;
       }
 
+      const trimmedTitle =
+        title.trim();
+
+      if (!trimmedTitle) {
+        showMessage(
+          'Brak tytułu',
+          'Podaj tytuł wpisu.',
+        );
+
+        return;
+      }
+
       try {
-        setIsLoading(true);
+        setIsSaving(
+          true,
+        );
 
         const response =
           await apiFetch(
             `/entries/${id}`,
+            {
+              method:
+                'PATCH',
+
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+
+              body:
+                JSON.stringify({
+                  title:
+                    trimmedTitle,
+
+                  description:
+                    description.trim() ||
+                    null,
+
+                  category,
+                }),
+            },
           );
 
         if (!response.ok) {
@@ -158,254 +363,312 @@ export default function EditEntryScreen() {
           );
         }
 
-        const entry: Entry =
-          await response.json();
+        router.replace({
+          pathname:
+            '/entry/[id]',
 
-        setTitle(
-          entry.title,
-        );
-
-        setDescription(
-          entry.description ??
-            '',
-        );
-
-        setCategory(
-          entry.category,
-        );
-      } catch (error) {
+          params: {
+            id,
+          },
+        });
+      } catch (err) {
         console.error(
-          'Błąd pobierania wpisu:',
-          error,
+          'Błąd edycji wpisu:',
+          err,
         );
 
         showMessage(
           'Błąd',
-          'Nie udało się pobrać wpisu.',
+          'Nie udało się zapisać zmian.',
         );
       } finally {
-        setIsLoading(false);
+        setIsSaving(
+          false,
+        );
       }
     };
 
-    void load();
-  }, [id]);
-
-  const handleSave = async () => {
-    if (!id) {
-      return;
-    }
-
-    if (!title.trim()) {
-      showMessage(
-        'Brak tytułu',
-        'Podaj tytuł wpisu.',
-      );
-
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-
-      const response =
-        await apiFetch(
-          `/entries/${id}`,
-          {
-            method: 'PATCH',
-
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-
-            body:
-              JSON.stringify({
-                title:
-                  title.trim(),
-
-                description:
-                  description.trim() ||
-                  null,
-
-                category,
-              }),
-          },
-        );
-
-      if (!response.ok) {
-        throw new Error(
-          await response.text(),
-        );
-      }
-
-      router.back();
-    } catch (error) {
-      console.error(
-        'Błąd edycji wpisu:',
-        error,
-      );
-
-      showMessage(
-        'Błąd',
-        'Nie udało się zapisać zmian.',
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const headerTitle =
+    room?.property?.name
+      ? `${room.property.name} › ${room.name} › ${title || entry?.title || 'Wpis'} › Edytuj`
+      : room
+        ? `${room.name} › ${title || entry?.title || 'Wpis'} › Edytuj`
+        : 'Edytuj wpis';
 
   if (isLoading) {
     return (
-      <SafeAreaView
-        style={styles.container}
-      >
-        <View
-          style={styles.center}
+      <>
+        <Stack.Screen
+          options={{
+            title:
+              'Edytuj wpis',
+          }}
+        />
+
+        <SafeAreaView
+          style={
+            styles.container
+          }
         >
-          <ActivityIndicator
-            size="large"
-          />
-        </View>
-      </SafeAreaView>
+          <View
+            style={
+              styles.center
+            }
+          >
+            <ActivityIndicator
+              size="large"
+            />
+          </View>
+        </SafeAreaView>
+      </>
+    );
+  }
+
+  if (error) {
+    return (
+      <>
+        <Stack.Screen
+          options={{
+            title:
+              'Edytuj wpis',
+          }}
+        />
+
+        <SafeAreaView
+          style={
+            styles.container
+          }
+        >
+          <View
+            style={
+              styles.center
+            }
+          >
+            <Text
+              style={
+                styles.errorTitle
+              }
+            >
+              Wystąpił błąd
+            </Text>
+
+            <Text
+              style={
+                styles.infoText
+              }
+            >
+              {error}
+            </Text>
+          </View>
+        </SafeAreaView>
+      </>
     );
   }
 
   return (
-    <SafeAreaView
-      style={styles.container}
-      edges={['bottom']}
-    >
-      <ScrollView
-        contentContainerStyle={
-          styles.content
+    <>
+      <Stack.Screen
+        options={{
+          title:
+            headerTitle,
+        }}
+      />
+
+      <SafeAreaView
+        style={
+          styles.container
         }
+        edges={['bottom']}
       >
-        <Text
-          style={styles.title}
-        >
-          Edytuj wpis
-        </Text>
-
-        <Text
-          style={styles.label}
-        >
-          Kategoria
-        </Text>
-
-        <View
-          style={
-            styles.categories
+        <ScrollView
+          contentContainerStyle={
+            styles.content
           }
+          keyboardShouldPersistTaps="handled"
         >
-          {categories.map(
-            (
-              item,
-            ) => {
-              const selected =
-                category ===
-                item.value;
+          <Text
+            style={
+              styles.title
+            }
+          >
+            Edytuj wpis
+          </Text>
 
-              return (
-                <Pressable
-                  key={
-                    item.value
+          <View
+            style={
+              styles.form
+            }
+          >
+            <Text
+              style={
+                styles.label
+              }
+            >
+              Kategoria
+            </Text>
+
+            <View
+              style={
+                styles.categories
+              }
+            >
+              {categories.map(
+                (
+                  option,
+                ) => {
+                  const selected =
+                    category ===
+                    option.value;
+
+                  return (
+                    <Pressable
+                      key={
+                        option.value
+                      }
+                      onPress={() =>
+                        setCategory(
+                          option.value,
+                        )
+                      }
+                      style={[
+                        styles.categoryButton,
+
+                        selected &&
+                          styles.categoryButtonSelected,
+                      ]}
+                    >
+                      <Text>
+                        {
+                          option.icon
+                        }
+                      </Text>
+
+                      <Text
+                        style={[
+                          styles.categoryText,
+
+                          selected &&
+                            styles.categoryTextSelected,
+                        ]}
+                      >
+                        {
+                          option.label
+                        }
+                      </Text>
+                    </Pressable>
+                  );
+                },
+              )}
+            </View>
+
+            <Text
+              style={
+                styles.label
+              }
+            >
+              Tytuł *
+            </Text>
+
+            <TextInput
+              value={title}
+              onChangeText={
+                setTitle
+              }
+              style={
+                styles.input
+              }
+              editable={
+                !isSaving
+              }
+            />
+
+            <Text
+              style={
+                styles.label
+              }
+            >
+              Opis
+            </Text>
+
+            <TextInput
+              value={
+                description
+              }
+              onChangeText={
+                setDescription
+              }
+              style={[
+                styles.input,
+                styles.textArea,
+              ]}
+              multiline
+              numberOfLines={
+                6
+              }
+              editable={
+                !isSaving
+              }
+            />
+
+            <Pressable
+              disabled={
+                isSaving
+              }
+              onPress={
+                handleSave
+              }
+              style={[
+                styles.saveButton,
+
+                isSaving &&
+                  styles.disabled,
+              ]}
+            >
+              {isSaving ? (
+                <ActivityIndicator
+                  color="#FFFFFF"
+                />
+              ) : (
+                <Text
+                  style={
+                    styles.saveButtonText
                   }
-                  onPress={() =>
-                    setCategory(
-                      item.value,
-                    )
-                  }
-                  style={({
-                    pressed,
-                  }) => [
-                    styles.category,
-
-                    selected &&
-                      styles.categorySelected,
-
-                    pressed &&
-                      styles.pressed,
-                  ]}
                 >
-                  <Text>
-                    {item.icon}{' '}
-                    {item.label}
-                  </Text>
-                </Pressable>
-              );
-            },
-          )}
-        </View>
+                  Zapisz zmiany
+                </Text>
+              )}
+            </Pressable>
 
-        <Text
-          style={styles.label}
-        >
-          Tytuł *
-        </Text>
+            <Pressable
+              disabled={
+                isSaving
+              }
+              onPress={() =>
+                router.replace({
+                  pathname:
+                    '/entry/[id]',
 
-        <TextInput
-          value={title}
-          onChangeText={setTitle}
-          style={styles.input}
-        />
-
-        <Text
-          style={styles.label}
-        >
-          Opis
-        </Text>
-
-        <TextInput
-          value={description}
-          onChangeText={
-            setDescription
-          }
-          multiline
-          style={[
-            styles.input,
-            styles.textArea,
-          ]}
-        />
-
-        <Pressable
-          disabled={isSaving}
-          onPress={
-            handleSave
-          }
-          style={
-            styles.saveButton
-          }
-        >
-          <Text
-            style={
-              styles.saveText
-            }
-          >
-            {isSaving
-              ? 'Zapisywanie...'
-              : 'Zapisz zmiany'}
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() =>
-            router.back()
-          }
-          style={
-            styles.cancelButton
-          }
-        >
-          <Text
-            style={
-              styles.cancelText
-            }
-          >
-            Anuluj
-          </Text>
-        </Pressable>
-      </ScrollView>
-    </SafeAreaView>
+                  params: {
+                    id,
+                  },
+                })
+              }
+              style={
+                styles.cancelButton
+              }
+            >
+              <Text
+                style={
+                  styles.cancelText
+                }
+              >
+                Anuluj
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -419,6 +682,7 @@ const styles =
 
     content: {
       padding: 24,
+      paddingBottom: 60,
     },
 
     center: {
@@ -427,6 +691,7 @@ const styles =
         'center',
       alignItems:
         'center',
+      padding: 24,
     },
 
     title: {
@@ -436,9 +701,14 @@ const styles =
       color: '#111827',
     },
 
-    label: {
+    form: {
       marginTop: 24,
+    },
+
+    label: {
+      marginTop: 20,
       marginBottom: 8,
+      fontSize: 14,
       fontWeight:
         '600',
       color: '#374151',
@@ -447,36 +717,54 @@ const styles =
     categories: {
       flexDirection:
         'row',
-      flexWrap: 'wrap',
+      flexWrap:
+        'wrap',
       gap: 10,
     },
 
-    category: {
-      padding: 12,
+    categoryButton: {
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor:
         '#D1D5DB',
-      borderRadius: 10,
       backgroundColor:
         '#FFFFFF',
+      flexDirection:
+        'row',
+      gap: 7,
     },
 
-    categorySelected: {
+    categoryButtonSelected: {
+      backgroundColor:
+        '#111827',
       borderColor:
         '#111827',
-      backgroundColor:
-        '#E5E7EB',
+    },
+
+    categoryText: {
+      color: '#374151',
+      fontWeight:
+        '600',
+    },
+
+    categoryTextSelected: {
+      color: '#FFFFFF',
     },
 
     input: {
-      backgroundColor:
-        '#FFFFFF',
+      minHeight: 50,
+      paddingHorizontal: 14,
+      paddingVertical: 14,
       borderWidth: 1,
       borderColor:
         '#D1D5DB',
-      borderRadius: 12,
-      padding: 14,
+      borderRadius: 11,
+      backgroundColor:
+        '#FFFFFF',
       fontSize: 16,
+      color: '#111827',
     },
 
     textArea: {
@@ -486,8 +774,8 @@ const styles =
     },
 
     saveButton: {
-      marginTop: 30,
       minHeight: 52,
+      marginTop: 30,
       borderRadius: 12,
       backgroundColor:
         '#111827',
@@ -497,13 +785,14 @@ const styles =
         'center',
     },
 
-    saveText: {
+    saveButtonText: {
       color: '#FFFFFF',
       fontWeight:
-        '600',
+        '700',
     },
 
     cancelButton: {
+      marginTop: 10,
       paddingVertical: 16,
       alignItems:
         'center',
@@ -513,7 +802,21 @@ const styles =
       color: '#6B7280',
     },
 
-    pressed: {
-      opacity: 0.7,
+    disabled: {
+      opacity: 0.5,
+    },
+
+    errorTitle: {
+      fontSize: 20,
+      fontWeight:
+        '700',
+      color: '#B91C1C',
+    },
+
+    infoText: {
+      marginTop: 10,
+      color: '#6B7280',
+      textAlign:
+        'center',
     },
   });

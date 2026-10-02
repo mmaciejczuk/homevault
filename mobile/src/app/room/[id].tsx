@@ -1,5 +1,6 @@
 import {
   router,
+  Stack,
   useFocusEffect,
   useLocalSearchParams,
 } from 'expo-router';
@@ -24,7 +25,9 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
-import { apiFetch } from '../../lib/api';
+import {
+  apiFetch,
+} from '../../lib/api';
 
 interface Property {
   id: number;
@@ -61,19 +64,33 @@ interface Entry {
 }
 
 const categoryLabels:
-  Record<EntryCategory, string> = {
-    ELECTRICAL: 'Elektryka',
-    PLUMBING: 'Hydraulika',
-    HEATING: 'Ogrzewanie',
-    WALL: 'Ściany',
-    FLOOR: 'Podłoga',
-    DEVICE: 'Urządzenie',
-    NOTE: 'Notatka',
-    OTHER: 'Inne',
+  Record<
+    EntryCategory,
+    string
+  > = {
+    ELECTRICAL:
+      'Elektryka',
+    PLUMBING:
+      'Hydraulika',
+    HEATING:
+      'Ogrzewanie',
+    WALL:
+      'Ściany',
+    FLOOR:
+      'Podłoga',
+    DEVICE:
+      'Urządzenie',
+    NOTE:
+      'Notatka',
+    OTHER:
+      'Inne',
   };
 
 const categoryIcons:
-  Record<EntryCategory, string> = {
+  Record<
+    EntryCategory,
+    string
+  > = {
     ELECTRICAL: '⚡',
     PLUMBING: '💧',
     HEATING: '🔥',
@@ -86,680 +103,915 @@ const categoryIcons:
 
 export default function RoomDetailsScreen() {
   const { id } =
-    useLocalSearchParams<{ id: string }>();
+    useLocalSearchParams<{
+      id: string;
+    }>();
 
-  const [room, setRoom] =
-    useState<Room | null>(null);
+  const [
+    room,
+    setRoom,
+  ] =
+    useState<Room | null>(
+      null,
+    );
 
-  const [entries, setEntries] =
+  const [
+    entries,
+    setEntries,
+  ] =
     useState<Entry[]>([]);
 
-  const [isLoading, setIsLoading] =
+  const [
+    isLoading,
+    setIsLoading,
+  ] =
     useState(true);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string | null
+    >(null);
+
+  const [
+    isDeleting,
+    setIsDeleting,
+  ] =
+    useState(false);
 
   const loadData =
-    useCallback(async () => {
+    useCallback(
+      async () => {
+        if (!id) {
+          return;
+        }
+
+        try {
+          setIsLoading(
+            true,
+          );
+
+          setError(
+            null,
+          );
+
+          const [
+            roomResponse,
+            entriesResponse,
+          ] =
+            await Promise.all([
+              apiFetch(
+                `/rooms/${id}`,
+              ),
+
+              apiFetch(
+                `/rooms/${id}/entries`,
+              ),
+            ]);
+
+          if (
+            !roomResponse.ok
+          ) {
+            throw new Error(
+              await roomResponse.text(),
+            );
+          }
+
+          if (
+            !entriesResponse.ok
+          ) {
+            throw new Error(
+              await entriesResponse.text(),
+            );
+          }
+
+          const roomData:
+            Room =
+            await roomResponse.json();
+
+          const entriesData:
+            Entry[] =
+            await entriesResponse.json();
+
+          setRoom(
+            roomData,
+          );
+
+          setEntries(
+            entriesData,
+          );
+        } catch (err) {
+          console.error(
+            'Błąd pobierania pomieszczenia:',
+            err,
+          );
+
+          setError(
+            'Nie udało się pobrać danych pomieszczenia.',
+          );
+        } finally {
+          setIsLoading(
+            false,
+          );
+        }
+      },
+      [id],
+    );
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadData();
+    }, [loadData]),
+  );
+
+  const handleAddEntry =
+    () => {
+      router.push({
+        pathname:
+          '/room/[id]/create-entry',
+
+        params: {
+          id,
+        },
+      });
+    };
+
+  const handleOpenEntry =
+    (
+      entryId: number,
+    ) => {
+      router.push({
+        pathname:
+          '/entry/[id]',
+
+        params: {
+          id:
+            entryId.toString(),
+        },
+      });
+    };
+
+  const handleEditRoom =
+    () => {
+      router.push({
+        pathname:
+          '/room/[id]/edit',
+
+        params: {
+          id,
+        },
+      });
+    };
+
+  const handleDeleteRoom =
+    async () => {
       if (!id) {
         return;
       }
 
-      try {
-        setIsLoading(true);
-        setError(null);
+      const confirmed =
+        Platform.OS === 'web'
+          ? window.confirm(
+              'Usunąć pomieszczenie wraz ze wszystkimi wpisami i zdjęciami?',
+            )
+          : await new Promise<boolean>(
+              (
+                resolve,
+              ) => {
+                Alert.alert(
+                  'Usuń pomieszczenie',
 
-        const [
-          roomResponse,
-          entriesResponse,
-        ] = await Promise.all([
-          apiFetch(
-            `/rooms/${id}`,
-          ),
+                  'Usunięte zostaną również wszystkie wpisy i zdjęcia.',
 
-          apiFetch(
-            `/rooms/${id}/entries`,
-          ),
-        ]);
+                  [
+                    {
+                      text:
+                        'Anuluj',
 
-        if (!roomResponse.ok) {
-          const responseBody =
-            await roomResponse.text();
+                      style:
+                        'cancel',
 
-          throw new Error(
-            `Room API zwróciło status ${roomResponse.status}: ${responseBody}`,
-          );
-        }
+                      onPress:
+                        () =>
+                          resolve(
+                            false,
+                          ),
+                    },
 
-        if (!entriesResponse.ok) {
-          const responseBody =
-            await entriesResponse.text();
+                    {
+                      text:
+                        'Usuń',
 
-          throw new Error(
-            `Entries API zwróciło status ${entriesResponse.status}: ${responseBody}`,
-          );
-        }
+                      style:
+                        'destructive',
 
-        const roomData: Room =
-          await roomResponse.json();
+                      onPress:
+                        () =>
+                          resolve(
+                            true,
+                          ),
+                    },
+                  ],
 
-        const entriesData: Entry[] =
-          await entriesResponse.json();
-
-        setRoom(roomData);
-        setEntries(entriesData);
-      } catch (err) {
-        console.error(
-          'Błąd pobierania pomieszczenia:',
-          err,
-        );
-
-        setError(
-          'Nie udało się pobrać danych pomieszczenia.',
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    }, [id]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-    }, [loadData]),
-  );
-
-  const handleAddEntry = () => {
-    router.push({
-      pathname:
-        '/room/[id]/create-entry',
-
-      params: {
-        id,
-      },
-    });
-  };
-
-  const handleOpenEntry = (
-    entryId: number,
-  ) => {
-    router.push({
-      pathname:
-        '/entry/[id]',
-
-      params: {
-        id: entryId.toString(),
-      },
-    });
-  };
-
-const handleEditRoom = () => {
-  router.push({
-    pathname:
-      '/room/[id]/edit',
-
-    params: {
-      id,
-    },
-  });
-};
-
-const handleDeleteRoom =
-  async () => {
-    if (!id) {
-      return;
-    }
-
-    const confirmed =
-      Platform.OS === 'web'
-        ? window.confirm(
-            'Usunąć pomieszczenie wraz ze wszystkimi wpisami i zdjęciami?',
-          )
-        : await new Promise<boolean>(
-            (
-              resolve,
-            ) => {
-              Alert.alert(
-                'Usuń pomieszczenie',
-
-                'Usunięte zostaną również wpisy i zdjęcia.',
-
-                [
                   {
-                    text:
-                      'Anuluj',
+                    cancelable:
+                      true,
 
-                    style:
-                      'cancel',
-
-                    onPress:
+                    onDismiss:
                       () =>
                         resolve(
                           false,
                         ),
                   },
+                );
+              },
+            );
 
-                  {
-                    text:
-                      'Usuń',
+      if (!confirmed) {
+        return;
+      }
 
-                    style:
-                      'destructive',
+      try {
+        setIsDeleting(
+          true,
+        );
 
-                    onPress:
-                      () =>
-                        resolve(
-                          true,
-                        ),
-                  },
-                ],
-              );
+        const response =
+          await apiFetch(
+            `/rooms/${id}`,
+            {
+              method:
+                'DELETE',
             },
           );
 
-    if (!confirmed) {
-      return;
-    }
+        if (!response.ok) {
+          throw new Error(
+            await response.text(),
+          );
+        }
 
-    try {
-      const response =
-        await apiFetch(
-          `/rooms/${id}`,
-          {
-            method:
-              'DELETE',
+        router.replace({
+          pathname:
+            '/property/[id]/rooms',
+
+          params: {
+            id:
+              room?.propertyId.toString() ??
+              '',
           },
+        });
+      } catch (err) {
+        console.error(
+          'Błąd usuwania pomieszczenia:',
+          err,
         );
 
-      if (!response.ok) {
-        throw new Error(
-          await response.text(),
+        if (
+          Platform.OS ===
+          'web'
+        ) {
+          window.alert(
+            'Nie udało się usunąć pomieszczenia.',
+          );
+        } else {
+          Alert.alert(
+            'Błąd',
+            'Nie udało się usunąć pomieszczenia.',
+          );
+        }
+      } finally {
+        setIsDeleting(
+          false,
         );
       }
-
-      router.back();
-    } catch (error) {
-      console.error(
-        'Błąd usuwania pomieszczenia:',
-        error,
-      );
-
-      Alert.alert(
-        'Błąd',
-        'Nie udało się usunąć pomieszczenia.',
-      );
-    }
-  };
+    };
 
   if (isLoading) {
     return (
-      <SafeAreaView
-        style={styles.container}
-        edges={['bottom']}
-      >
-        <View style={styles.center}>
-          <ActivityIndicator
-            size="large"
-          />
+      <>
+        <Stack.Screen
+          options={{
+            title:
+              'Pomieszczenie',
+          }}
+        />
 
-          <Text
-            style={styles.infoText}
+        <SafeAreaView
+          style={
+            styles.container
+          }
+        >
+          <View
+            style={
+              styles.center
+            }
           >
-            Pobieranie pomieszczenia...
-          </Text>
-        </View>
-      </SafeAreaView>
+            <ActivityIndicator
+              size="large"
+            />
+
+            <Text
+              style={
+                styles.infoText
+              }
+            >
+              Pobieranie pomieszczenia...
+            </Text>
+          </View>
+        </SafeAreaView>
+      </>
     );
   }
 
-  if (error || !room) {
+  if (
+    error ||
+    !room
+  ) {
     return (
-      <SafeAreaView
-        style={styles.container}
-        edges={['bottom']}
-      >
-        <View style={styles.center}>
-          <Text
-            style={styles.errorTitle}
-          >
-            Wystąpił błąd
-          </Text>
+      <>
+        <Stack.Screen
+          options={{
+            title:
+              'Pomieszczenie',
+          }}
+        />
 
-          <Text
-            style={styles.infoText}
-          >
-            {error}
-          </Text>
-
-          <Pressable
-            style={styles.button}
-            onPress={loadData}
+        <SafeAreaView
+          style={
+            styles.container
+          }
+        >
+          <View
+            style={
+              styles.center
+            }
           >
             <Text
-              style={styles.buttonText}
+              style={
+                styles.errorTitle
+              }
             >
-              Spróbuj ponownie
+              Wystąpił błąd
             </Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
+
+            <Text
+              style={
+                styles.infoText
+              }
+            >
+              {error}
+            </Text>
+
+            <Pressable
+              style={
+                styles.button
+              }
+              onPress={
+                loadData
+              }
+            >
+              <Text
+                style={
+                  styles.buttonText
+                }
+              >
+                Spróbuj ponownie
+              </Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </>
     );
   }
 
   return (
-    <SafeAreaView
-      style={styles.container}
-      edges={['bottom']}
-    >
-      <ScrollView
-        contentContainerStyle={
-          styles.content
+    <>
+      <Stack.Screen
+        options={{
+          title:
+            `${room.property.name} › ${room.name}`,
+        }}
+      />
+
+      <SafeAreaView
+        style={
+          styles.container
         }
+        edges={['bottom']}
       >
-        <Text
-          style={styles.roomIcon}
+        <ScrollView
+          contentContainerStyle={
+            styles.content
+          }
         >
-          🚪
-        </Text>
-
-        <Text
-          style={styles.roomName}
-        >
-          {room.name}
-        </Text>
-
-        {room.floor && (
-          <Text
-            style={styles.roomDetail}
-          >
-            {room.floor}
-          </Text>
-        )}
-
-        {room.description && (
           <Text
             style={
-              styles.roomDescription
+              styles.roomIcon
             }
           >
-            {room.description}
+            🚪
           </Text>
-        )}
 
-        <View
-          style={{
-            flexDirection: 'row',
-            gap: 12,
-            marginTop: 20,
-          }}
-        >
-          <Pressable
-            onPress={handleEditRoom}
-            style={{
-              padding: 12,
-              borderRadius: 10,
-              borderWidth: 1,
-              borderColor: '#D1D5DB',
-              backgroundColor:
-                '#FFFFFF',
-            }}
-          >
-            <Text>
-              ✏️ Edytuj
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={
-              handleDeleteRoom
-            }
-            style={{
-              padding: 12,
-              borderRadius: 10,
-              backgroundColor:
-                '#FEE2E2',
-            }}
-          >
-            <Text
-              style={{
-                color:
-                  '#B91C1C',
-                fontWeight:
-                  '600',
-              }}
-            >
-              🗑 Usuń
-            </Text>
-          </Pressable>
-        </View>
-
-        <View
-          style={styles.headerRow}
-        >
           <Text
-            style={styles.sectionTitle}
+            style={
+              styles.roomName
+            }
           >
-            Dokumentacja
+            {room.name}
           </Text>
 
-          {entries.length > 0 && (
+          {room.floor && (
+            <Text
+              style={
+                styles.roomDetail
+              }
+            >
+              {room.floor}
+            </Text>
+          )}
+
+          {room.description && (
+            <Text
+              style={
+                styles.roomDescription
+              }
+            >
+              {room.description}
+            </Text>
+          )}
+
+          <View
+            style={
+              styles.actions
+            }
+          >
             <Pressable
-              onPress={handleAddEntry}
-              style={({ pressed }) => [
-                styles.smallButton,
-                pressed &&
-                  styles.pressed,
-              ]}
+              onPress={
+                handleEditRoom
+              }
+              style={
+                styles.editButton
+              }
             >
               <Text
                 style={
-                  styles.smallButtonText
+                  styles.editButtonText
                 }
               >
-                + Dodaj
+                ✏️ Edytuj
               </Text>
             </Pressable>
-          )}
-        </View>
-
-        {entries.length === 0 ? (
-          <View
-            style={styles.emptyState}
-          >
-            <Text
-              style={styles.emptyIcon}
-            >
-              📋
-            </Text>
-
-            <Text
-              style={styles.emptyTitle}
-            >
-              Brak wpisów
-            </Text>
-
-            <Text
-              style={styles.infoText}
-            >
-              Dodaj pierwszy wpis dotyczący
-              instalacji, urządzenia lub prac
-              wykonanych w tym pomieszczeniu.
-            </Text>
 
             <Pressable
-              onPress={handleAddEntry}
-              style={({ pressed }) => [
-                styles.button,
-                pressed &&
-                  styles.pressed,
-              ]}
+              disabled={
+                isDeleting
+              }
+              onPress={
+                handleDeleteRoom
+              }
+              style={
+                styles.deleteButton
+              }
             >
               <Text
-                style={styles.buttonText}
+                style={
+                  styles.deleteButtonText
+                }
               >
-                + Dodaj wpis
+                {isDeleting
+                  ? 'Usuwanie...'
+                  : '🗑 Usuń'}
               </Text>
             </Pressable>
           </View>
-        ) : (
+
           <View
-            style={styles.entriesList}
+            style={
+              styles.headerRow
+            }
           >
-            {entries.map((entry) => (
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
+              Dokumentacja
+            </Text>
+
+            {entries.length >
+              0 && (
               <Pressable
-                key={entry.id}
-                style={({ pressed }) => [
-                  styles.entryCard,
-                  pressed &&
-                    styles.pressed,
-                ]}
-                onPress={() =>
-                  handleOpenEntry(
-                    entry.id,
-                  )
+                onPress={
+                  handleAddEntry
+                }
+                style={
+                  styles.smallButton
                 }
               >
-                <View
-                  style={
-                    styles.entryIconContainer
-                  }
-                >
-                  <Text
-                    style={
-                      styles.entryIcon
-                    }
-                  >
-                    {
-                      categoryIcons[
-                        entry.category
-                      ]
-                    }
-                  </Text>
-                </View>
-
-                <View
-                  style={
-                    styles.entryContent
-                  }
-                >
-                  <Text
-                    style={
-                      styles.entryCategory
-                    }
-                  >
-                    {
-                      categoryLabels[
-                        entry.category
-                      ]
-                    }
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.entryTitle
-                    }
-                  >
-                    {entry.title}
-                  </Text>
-
-                  {entry.description && (
-                    <Text
-                      style={
-                        styles.entryDescription
-                      }
-                      numberOfLines={2}
-                    >
-                      {
-                        entry.description
-                      }
-                    </Text>
-                  )}
-                </View>
-
                 <Text
-                  style={styles.arrow}
+                  style={
+                    styles.smallButtonText
+                  }
                 >
-                  ›
+                  + Dodaj
                 </Text>
               </Pressable>
-            ))}
+            )}
           </View>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+
+          {entries.length ===
+          0 ? (
+            <View
+              style={
+                styles.emptyState
+              }
+            >
+              <Text
+                style={
+                  styles.emptyIcon
+                }
+              >
+                📋
+              </Text>
+
+              <Text
+                style={
+                  styles.emptyTitle
+                }
+              >
+                Brak wpisów
+              </Text>
+
+              <Text
+                style={
+                  styles.infoText
+                }
+              >
+                Dodaj pierwszy
+                wpis dotyczący
+                instalacji,
+                urządzenia lub
+                wykonanych prac.
+              </Text>
+
+              <Pressable
+                onPress={
+                  handleAddEntry
+                }
+                style={
+                  styles.button
+                }
+              >
+                <Text
+                  style={
+                    styles.buttonText
+                  }
+                >
+                  + Dodaj wpis
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View
+              style={
+                styles.entriesList
+              }
+            >
+              {entries.map(
+                (
+                  entry,
+                ) => (
+                  <Pressable
+                    key={
+                      entry.id
+                    }
+                    style={
+                      styles.entryCard
+                    }
+                    onPress={() =>
+                      handleOpenEntry(
+                        entry.id,
+                      )
+                    }
+                  >
+                    <View
+                      style={
+                        styles.entryIconContainer
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.entryIcon
+                        }
+                      >
+                        {
+                          categoryIcons[
+                            entry
+                              .category
+                          ]
+                        }
+                      </Text>
+                    </View>
+
+                    <View
+                      style={
+                        styles.entryContent
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.entryCategory
+                        }
+                      >
+                        {
+                          categoryLabels[
+                            entry
+                              .category
+                          ]
+                        }
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.entryTitle
+                        }
+                      >
+                        {
+                          entry.title
+                        }
+                      </Text>
+
+                      {entry.description && (
+                        <Text
+                          style={
+                            styles.entryDescription
+                          }
+                          numberOfLines={
+                            2
+                          }
+                        >
+                          {
+                            entry.description
+                          }
+                        </Text>
+                      )}
+                    </View>
+
+                    <Text
+                      style={
+                        styles.arrow
+                      }
+                    >
+                      ›
+                    </Text>
+                  </Pressable>
+                ),
+              )}
+            </View>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F7F8FA',
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        '#F7F8FA',
+    },
 
-  content: {
-    padding: 24,
-  },
+    content: {
+      padding: 24,
+      paddingBottom: 60,
+    },
 
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    center: {
+      flex: 1,
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
+      padding: 24,
+    },
 
-  roomIcon: {
-    fontSize: 54,
-  },
+    roomIcon: {
+      fontSize: 54,
+    },
 
-  roomName: {
-    marginTop: 14,
-    fontSize: 30,
-    fontWeight: '700',
-    color: '#111827',
-  },
+    roomName: {
+      marginTop: 14,
+      fontSize: 30,
+      fontWeight:
+        '700',
+      color: '#111827',
+    },
 
-  roomDetail: {
-    marginTop: 7,
-    fontSize: 15,
-    color: '#6B7280',
-  },
+    roomDetail: {
+      marginTop: 7,
+      fontSize: 15,
+      color: '#6B7280',
+    },
 
-  roomDescription: {
-    marginTop: 8,
-    fontSize: 15,
-    lineHeight: 22,
-    color: '#6B7280',
-  },
+    roomDescription: {
+      marginTop: 8,
+      fontSize: 15,
+      lineHeight: 22,
+      color: '#6B7280',
+    },
 
-  headerRow: {
-    marginTop: 36,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    actions: {
+      marginTop: 20,
+      flexDirection:
+        'row',
+      gap: 12,
+    },
 
-  sectionTitle: {
-    fontSize: 21,
-    fontWeight: '700',
-    color: '#111827',
-  },
+    editButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor:
+        '#D1D5DB',
+      backgroundColor:
+        '#FFFFFF',
+    },
 
-  emptyState: {
-    minHeight: 380,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    editButtonText: {
+      fontWeight:
+        '600',
+      color: '#111827',
+    },
 
-  emptyIcon: {
-    fontSize: 56,
-    marginBottom: 18,
-  },
+    deleteButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 10,
+      backgroundColor:
+        '#FEE2E2',
+    },
 
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#111827',
-  },
+    deleteButtonText: {
+      color: '#B91C1C',
+      fontWeight:
+        '600',
+    },
 
-  infoText: {
-    marginTop: 8,
-    maxWidth: 360,
-    textAlign: 'center',
-    color: '#6B7280',
-    lineHeight: 21,
-  },
+    headerRow: {
+      marginTop: 36,
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+      justifyContent:
+        'space-between',
+    },
 
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#B91C1C',
-  },
+    sectionTitle: {
+      fontSize: 21,
+      fontWeight:
+        '700',
+      color: '#111827',
+    },
 
-  button: {
-    marginTop: 24,
-    paddingHorizontal: 24,
-    paddingVertical: 15,
-    backgroundColor: '#111827',
-    borderRadius: 12,
-  },
+    emptyState: {
+      minHeight: 380,
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
+    },
 
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
+    emptyIcon: {
+      fontSize: 56,
+      marginBottom: 18,
+    },
 
-  smallButton: {
-    backgroundColor: '#111827',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
+    emptyTitle: {
+      fontSize: 20,
+      fontWeight:
+        '600',
+      color: '#111827',
+    },
 
-  smallButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
+    infoText: {
+      marginTop: 8,
+      maxWidth: 360,
+      textAlign:
+        'center',
+      color: '#6B7280',
+      lineHeight: 21,
+    },
 
-  pressed: {
-    opacity: 0.7,
-  },
+    errorTitle: {
+      fontSize: 20,
+      fontWeight:
+        '700',
+      color: '#B91C1C',
+    },
 
-  entriesList: {
-    marginTop: 20,
-    gap: 14,
-  },
+    button: {
+      marginTop: 24,
+      paddingHorizontal: 24,
+      paddingVertical: 15,
+      backgroundColor:
+        '#111827',
+      borderRadius: 12,
+    },
 
-  entryCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 16,
-    padding: 17,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+    buttonText: {
+      color: '#FFFFFF',
+      fontSize: 15,
+      fontWeight:
+        '600',
+    },
 
-  entryIconContainer: {
-    width: 54,
-    height: 54,
-    borderRadius: 14,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    smallButton: {
+      backgroundColor:
+        '#111827',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 10,
+    },
 
-  entryIcon: {
-    fontSize: 27,
-  },
+    smallButtonText: {
+      color: '#FFFFFF',
+      fontWeight:
+        '600',
+    },
 
-  entryContent: {
-    flex: 1,
-    marginLeft: 15,
-  },
+    entriesList: {
+      marginTop: 20,
+      gap: 14,
+    },
 
-  entryCategory: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6B7280',
-    textTransform: 'uppercase',
-  },
+    entryCard: {
+      backgroundColor:
+        '#FFFFFF',
+      borderWidth: 1,
+      borderColor:
+        '#E5E7EB',
+      borderRadius: 16,
+      padding: 17,
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+    },
 
-  entryTitle: {
-    marginTop: 3,
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#111827',
-  },
+    entryIconContainer: {
+      width: 54,
+      height: 54,
+      borderRadius: 14,
+      backgroundColor:
+        '#F3F4F6',
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
+    },
 
-  entryDescription: {
-    marginTop: 5,
-    color: '#6B7280',
-    lineHeight: 19,
-  },
+    entryIcon: {
+      fontSize: 27,
+    },
 
-  arrow: {
-    marginLeft: 12,
-    fontSize: 30,
-    color: '#9CA3AF',
-  },
-});
+    entryContent: {
+      flex: 1,
+      marginLeft: 15,
+    },
+
+    entryCategory: {
+      fontSize: 12,
+      fontWeight:
+        '600',
+      color: '#6B7280',
+      textTransform:
+        'uppercase',
+    },
+
+    entryTitle: {
+      marginTop: 3,
+      fontSize: 17,
+      fontWeight:
+        '600',
+      color: '#111827',
+    },
+
+    entryDescription: {
+      marginTop: 5,
+      color: '#6B7280',
+      lineHeight: 19,
+    },
+
+    arrow: {
+      marginLeft: 12,
+      fontSize: 30,
+      color: '#9CA3AF',
+    },
+  });
