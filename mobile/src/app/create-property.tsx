@@ -1,8 +1,13 @@
-import { router } from 'expo-router';
-
-import { useState } from 'react';
+import {
+  router,
+} from 'expo-router';
 
 import {
+  useState,
+} from 'react';
+
+import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -18,26 +23,49 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
-import { apiFetch } from '../lib/api';
+import {
+  apiFetch,
+} from '../lib/api';
+
+interface CreatedProperty {
+  id: number;
+  name: string;
+  address?: string | null;
+  yearBuilt?: number | null;
+}
 
 export default function CreatePropertyScreen() {
-  const [name, setName] =
+  const [
+    name,
+    setName,
+  ] =
     useState('');
 
-  const [address, setAddress] =
+  const [
+    address,
+    setAddress,
+  ] =
     useState('');
 
-  const [yearBuilt, setYearBuilt] =
+  const [
+    yearBuilt,
+    setYearBuilt,
+  ] =
     useState('');
 
-  const [isSaving, setIsSaving] =
+  const [
+    isSaving,
+    setIsSaving,
+  ] =
     useState(false);
 
   const showMessage = (
     title: string,
     message: string,
   ) => {
-    if (Platform.OS === 'web') {
+    if (
+      Platform.OS === 'web'
+    ) {
       window.alert(
         `${title}\n\n${message}`,
       );
@@ -51,123 +79,141 @@ export default function CreatePropertyScreen() {
     );
   };
 
-  const handleSave = async () => {
-    const trimmedName =
-      name.trim();
+  const handleSave =
+    async () => {
+      const trimmedName =
+        name.trim();
 
-    if (!trimmedName) {
-      showMessage(
-        'Brak nazwy',
-        'Podaj nazwę nieruchomości.',
-      );
-
-      return;
-    }
-
-    const parsedYearBuilt =
-      yearBuilt
-        ? Number(yearBuilt)
-        : undefined;
-
-    if (
-      parsedYearBuilt !== undefined &&
-      (
-        !Number.isInteger(
-          parsedYearBuilt,
-        ) ||
-        parsedYearBuilt < 1000 ||
-        parsedYearBuilt > 9999
-      )
-    ) {
-      showMessage(
-        'Nieprawidłowy rok',
-        'Podaj poprawny czterocyfrowy rok budowy.',
-      );
-
-      return;
-    }
-
-    const property = {
-      name: trimmedName,
-      address:
-        address.trim() ||
-        undefined,
-      yearBuilt:
-        parsedYearBuilt,
-    };
-
-    try {
-      setIsSaving(true);
-
-      console.log(
-        'Wysyłam do API:',
-        property,
-      );
-
-      const response =
-        await apiFetch(
-          '/properties',
-          {
-            method: 'POST',
-
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-
-            body: JSON.stringify(
-              property,
-            ),
-          },
+      if (!trimmedName) {
+        showMessage(
+          'Brak nazwy',
+          'Podaj nazwę nieruchomości.',
         );
 
-      if (!response.ok) {
-        const responseBody =
-          await response.text();
-
-        throw new Error(
-          `API zwróciło status ${response.status}: ${responseBody}`,
-        );
+        return;
       }
 
-      const createdProperty =
-        await response.json();
+      let parsedYearBuilt:
+        | number
+        | undefined;
 
-      console.log(
-        'Nieruchomość zapisana:',
-        createdProperty,
-      );
+      if (
+        yearBuilt.trim()
+      ) {
+        parsedYearBuilt =
+          Number(
+            yearBuilt,
+          );
 
-      showMessage(
-        'Zapisano',
-        `Dodano nieruchomość: ${createdProperty.name}`,
-      );
+        if (
+          !Number.isInteger(
+            parsedYearBuilt,
+          ) ||
+          parsedYearBuilt <
+            1000 ||
+          parsedYearBuilt >
+            9999
+        ) {
+          showMessage(
+            'Nieprawidłowy rok',
+            'Podaj poprawny rok budowy.',
+          );
 
-      router.replace('/');
-    } catch (error) {
-      console.error(
-        'Błąd zapisu:',
-        error,
-      );
+          return;
+        }
+      }
 
-      showMessage(
-        'Błąd',
-        'Nie udało się zapisać nieruchomości.',
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
+      const payload = {
+        name:
+          trimmedName,
+
+        address:
+          address.trim() ||
+          undefined,
+
+        yearBuilt:
+          parsedYearBuilt,
+      };
+
+      try {
+        setIsSaving(
+          true,
+        );
+
+        const response =
+          await apiFetch(
+            '/properties',
+            {
+              method:
+                'POST',
+
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+
+              body:
+                JSON.stringify(
+                  payload,
+                ),
+            },
+          );
+
+        if (!response.ok) {
+          const responseBody =
+            await response.text();
+
+          throw new Error(
+            `POST /properties zwróciło ${response.status}: ${responseBody}`,
+          );
+        }
+
+        const createdProperty:
+          CreatedProperty =
+          await response.json();
+
+        router.replace({
+          pathname:
+            '/property/[id]',
+
+          params: {
+            id:
+              String(
+                createdProperty.id,
+              ),
+          },
+        });
+      } catch (error) {
+        console.error(
+          'Błąd tworzenia nieruchomości:',
+          error,
+        );
+
+        showMessage(
+          'Błąd',
+          'Nie udało się utworzyć nieruchomości.',
+        );
+      } finally {
+        setIsSaving(
+          false,
+        );
+      }
+    };
 
   return (
     <SafeAreaView
-      style={styles.container}
+      style={
+        styles.container
+      }
       edges={['bottom']}
     >
       <KeyboardAvoidingView
-        style={styles.container}
+        style={
+          styles.container
+        }
         behavior={
-          Platform.OS === 'ios'
+          Platform.OS ===
+          'ios'
             ? 'padding'
             : undefined
         }
@@ -178,115 +224,163 @@ export default function CreatePropertyScreen() {
           }
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.title}>
+          <Text
+            style={
+              styles.title
+            }
+          >
             Dodaj dom
           </Text>
 
           <Text
-            style={styles.subtitle}
+            style={
+              styles.subtitle
+            }
           >
-            Podaj podstawowe informacje
-            o nieruchomości.
+            Podaj podstawowe informacje o nieruchomości.
           </Text>
 
-          <View style={styles.form}>
-            <View
-              style={styles.field}
+          <View
+            style={
+              styles.form
+            }
+          >
+            <Text
+              style={
+                styles.label
+              }
             >
-              <Text
-                style={styles.label}
-              >
-                Nazwa *
-              </Text>
+              Nazwa *
+            </Text>
 
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="np. Mój dom"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
+            <TextInput
+              value={name}
+              onChangeText={
+                setName
+              }
+              placeholder="np. Dom"
+              placeholderTextColor="#9CA3AF"
+              style={
+                styles.input
+              }
+              editable={
+                !isSaving
+              }
+              autoCapitalize="sentences"
+            />
 
-            <View
-              style={styles.field}
+            <Text
+              style={
+                styles.label
+              }
             >
-              <Text
-                style={styles.label}
-              >
-                Adres
-              </Text>
+              Adres
+            </Text>
 
-              <TextInput
-                style={styles.input}
-                value={address}
-                onChangeText={
-                  setAddress
-                }
-                placeholder="np. ul. Przykładowa 10"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
+            <TextInput
+              value={
+                address
+              }
+              onChangeText={
+                setAddress
+              }
+              placeholder="np. Warszawa, ul. ..."
+              placeholderTextColor="#9CA3AF"
+              style={
+                styles.input
+              }
+              editable={
+                !isSaving
+              }
+            />
 
-            <View
-              style={styles.field}
+            <Text
+              style={
+                styles.label
+              }
             >
-              <Text
-                style={styles.label}
-              >
-                Rok budowy
-              </Text>
+              Rok budowy
+            </Text>
 
-              <TextInput
-                style={styles.input}
-                value={yearBuilt}
-                onChangeText={(
-                  value,
-                ) => {
-                  setYearBuilt(
-                    value.replace(
-                      /[^0-9]/g,
-                      '',
-                    ),
-                  );
-                }}
-                placeholder="np. 2026"
-                placeholderTextColor="#9CA3AF"
-                keyboardType="number-pad"
-                maxLength={4}
-              />
-            </View>
+            <TextInput
+              value={
+                yearBuilt
+              }
+              onChangeText={
+                setYearBuilt
+              }
+              placeholder="np. 2025"
+              placeholderTextColor="#9CA3AF"
+              keyboardType="number-pad"
+              maxLength={4}
+              style={
+                styles.input
+              }
+              editable={
+                !isSaving
+              }
+            />
 
             <Pressable
-              disabled={isSaving}
-              style={({ pressed }) => [
-                styles.saveButton,
+              disabled={
+                isSaving
+              }
+              onPress={
+                handleSave
+              }
+              style={({
+                pressed,
+              }) => [
+                styles.primaryButton,
 
                 pressed &&
-                  styles.buttonPressed,
+                  styles.pressed,
 
                 isSaving &&
-                  styles.buttonDisabled,
+                  styles.disabled,
               ]}
-              onPress={handleSave}
             >
-              <Text
-                style={
-                  styles.saveButtonText
-                }
-              >
-                {isSaving
-                  ? 'Zapisywanie...'
-                  : 'Zapisz'}
-              </Text>
+              {isSaving ? (
+                <View
+                  style={
+                    styles.savingRow
+                  }
+                >
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+
+                  <Text
+                    style={
+                      styles.primaryButtonText
+                    }
+                  >
+                    Zapisywanie...
+                  </Text>
+                </View>
+              ) : (
+                <Text
+                  style={
+                    styles.primaryButtonText
+                  }
+                >
+                  Dodaj dom
+                </Text>
+              )}
             </Pressable>
 
             <Pressable
-              style={
-                styles.cancelButton
+              disabled={
+                isSaving
               }
               onPress={() =>
-                router.back()
+                router.replace(
+                  '/',
+                )
+              }
+              style={
+                styles.cancelButton
               }
             >
               <Text
@@ -304,87 +398,107 @@ export default function CreatePropertyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F7F8FA',
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        '#F7F8FA',
+    },
 
-  content: {
-    flexGrow: 1,
-    padding: 24,
-  },
+    content: {
+      padding: 24,
+      paddingBottom: 60,
+    },
 
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-  },
+    title: {
+      fontSize: 28,
+      fontWeight:
+        '700',
+      color: '#111827',
+    },
 
-  subtitle: {
-    marginTop: 6,
-    fontSize: 15,
-    color: '#6B7280',
-  },
+    subtitle: {
+      marginTop: 8,
+      fontSize: 15,
+      lineHeight: 22,
+      color: '#6B7280',
+    },
 
-  form: {
-    marginTop: 32,
-  },
+    form: {
+      marginTop: 24,
+    },
 
-  field: {
-    marginBottom: 22,
-  },
+    label: {
+      marginTop: 18,
+      marginBottom: 8,
+      fontSize: 14,
+      fontWeight:
+        '600',
+      color: '#374151',
+    },
 
-  label: {
-    marginBottom: 8,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-  },
+    input: {
+      minHeight: 50,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor:
+        '#D1D5DB',
+      borderRadius: 11,
+      backgroundColor:
+        '#FFFFFF',
+      fontSize: 16,
+      color: '#111827',
+    },
 
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: '#111827',
-  },
+    primaryButton: {
+      minHeight: 52,
+      marginTop: 30,
+      borderRadius: 12,
+      backgroundColor:
+        '#111827',
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
 
-  saveButton: {
-    marginTop: 12,
-    backgroundColor: '#111827',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 52,
-  },
+    primaryButtonText: {
+      color: '#FFFFFF',
+      fontSize: 15,
+      fontWeight:
+        '700',
+    },
 
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+    savingRow: {
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+      gap: 10,
+    },
 
-  buttonPressed: {
-    opacity: 0.75,
-  },
+    cancelButton: {
+      minHeight: 48,
+      marginTop: 8,
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
 
-  buttonDisabled: {
-    opacity: 0.5,
-  },
+    cancelButtonText: {
+      color: '#6B7280',
+      fontSize: 15,
+      fontWeight:
+        '600',
+    },
 
-  cancelButton: {
-    marginTop: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
+    pressed: {
+      opacity: 0.72,
+    },
 
-  cancelButtonText: {
-    color: '#6B7280',
-    fontSize: 15,
-  },
-});
+    disabled: {
+      opacity: 0.55,
+    },
+  });

@@ -1,4 +1,6 @@
-import { router } from 'expo-router';
+import {
+  router,
+} from 'expo-router';
 
 import {
   useEffect,
@@ -28,87 +30,150 @@ import {
   supabase,
 } from '../lib/supabase';
 
+interface AccountInfo {
+  id: string;
+  email:
+    | string
+    | null;
+  provider:
+    | string
+    | null;
+}
+
 export default function AccountScreen() {
-  const [email, setEmail] =
-    useState<string | null>(null);
+  const [
+    account,
+    setAccount,
+  ] =
+    useState<AccountInfo | null>(
+      null,
+    );
 
-  const [provider, setProvider] =
-    useState<string>('—');
-
-  const [isLoading, setIsLoading] =
+  const [
+    isLoading,
+    setIsLoading,
+  ] =
     useState(true);
 
-  const [isSigningOut, setIsSigningOut] =
+  const [
+    isSigningOut,
+    setIsSigningOut,
+  ] =
     useState(false);
 
   const [
-    isDeletingAccount,
-    setIsDeletingAccount,
-  ] = useState(false);
+    isDeleting,
+    setIsDeleting,
+  ] =
+    useState(false);
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string | null
+    >(null);
 
   useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const {
-          data: { user },
-          error,
-        } =
-          await supabase.auth.getUser();
+    const loadAccount =
+      async () => {
+        try {
+          setIsLoading(
+            true,
+          );
 
-        if (error) {
-          throw error;
-        }
+          setError(
+            null,
+          );
 
-        setEmail(
-          user?.email ?? null,
-        );
+          const {
+            data: {
+              user,
+            },
 
-        const providerName =
-          user?.app_metadata?.provider;
+            error:
+              userError,
+          } =
+            await supabase.auth
+              .getUser();
 
-        if (
-          typeof providerName ===
-          'string'
-        ) {
-          setProvider(
-            formatProvider(
-              providerName,
-            ),
+          if (userError) {
+            throw userError;
+          }
+
+          if (!user) {
+            throw new Error(
+              'Brak zalogowanego użytkownika.',
+            );
+          }
+
+          const provider =
+            user.app_metadata
+              ?.provider ??
+            user.identities?.[0]
+              ?.provider ??
+            null;
+
+          setAccount({
+            id:
+              user.id,
+
+            email:
+              user.email ??
+              null,
+
+            provider:
+              provider
+                ? String(
+                    provider,
+                  )
+                : null,
+          });
+        } catch (err) {
+          console.error(
+            'Błąd pobierania konta:',
+            err,
+          );
+
+          setError(
+            'Nie udało się pobrać danych konta.',
+          );
+        } finally {
+          setIsLoading(
+            false,
           );
         }
-      } catch (error) {
-        console.error(
-          'Błąd pobierania użytkownika:',
-          error,
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      };
 
-    loadUser();
+    void loadAccount();
   }, []);
 
-  const performSignOut =
+  const handleSignOut =
     async () => {
       try {
-        setIsSigningOut(true);
+        setIsSigningOut(
+          true,
+        );
 
-        const { error } =
+        const {
+          error:
+            signOutError,
+        } =
           await supabase.auth
             .signOut();
 
-        if (error) {
-          throw error;
+        if (signOutError) {
+          throw signOutError;
         }
 
         router.replace(
           '/login',
         );
-      } catch (error) {
+      } catch (err) {
         console.error(
           'Błąd wylogowania:',
-          error,
+          err,
         );
 
         showMessage(
@@ -122,44 +187,81 @@ export default function AccountScreen() {
       }
     };
 
-  const handleSignOut = () => {
-    if (
-      Platform.OS === 'web'
-    ) {
-      const confirmed =
-        window.confirm(
-          'Czy na pewno chcesz się wylogować?',
+  const confirmDelete =
+    async () => {
+      if (
+        Platform.OS === 'web'
+      ) {
+        return window.confirm(
+          'Czy na pewno chcesz trwale usunąć konto? Wszystkie domy, pomieszczenia, wpisy i załączniki zostaną usunięte.',
         );
-
-      if (confirmed) {
-        performSignOut();
       }
 
-      return;
-    }
+      return new Promise<boolean>(
+        (
+          resolve,
+        ) => {
+          Alert.alert(
+            'Usuń konto',
 
-    Alert.alert(
-      'Wylogowanie',
-      'Czy na pewno chcesz się wylogować?',
-      [
-        {
-          text: 'Anuluj',
-          style: 'cancel',
-        },
-        {
-          text: 'Wyloguj',
-          style: 'destructive',
-          onPress:
-            performSignOut,
-        },
-      ],
-    );
-  };
+            'Ta operacja jest nieodwracalna. Zostaną usunięte wszystkie domy, pomieszczenia, wpisy i załączniki.',
 
-  const performDeleteAccount =
+            [
+              {
+                text:
+                  'Anuluj',
+
+                style:
+                  'cancel',
+
+                onPress:
+                  () =>
+                    resolve(
+                      false,
+                    ),
+              },
+
+              {
+                text:
+                  'Usuń konto',
+
+                style:
+                  'destructive',
+
+                onPress:
+                  () =>
+                    resolve(
+                      true,
+                    ),
+              },
+            ],
+
+            {
+              cancelable:
+                true,
+
+              onDismiss:
+                () =>
+                  resolve(
+                    false,
+                  ),
+            },
+          );
+        },
+      );
+    };
+
+  const handleDeleteAccount =
     async () => {
+      const confirmed =
+        await confirmDelete();
+
+      if (!confirmed) {
+        return;
+      }
+
       try {
-        setIsDeletingAccount(
+        setIsDeleting(
           true,
         );
 
@@ -167,49 +269,23 @@ export default function AccountScreen() {
           await apiFetch(
             '/auth/account',
             {
-              method: 'DELETE',
+              method:
+                'DELETE',
             },
           );
 
         if (!response.ok) {
-          let message =
-            `Nie udało się usunąć konta. Status: ${response.status}.`;
-
-          try {
-            const body =
-              await response.json();
-
-            if (
-              typeof body?.message ===
-              'string'
-            ) {
-              message =
-                body.message;
-            } else if (
-              Array.isArray(
-                body?.message,
-              )
-            ) {
-              message =
-                body.message.join(
-                  '\n',
-                );
-            }
-          } catch {
-            // Brak body JSON.
-          }
+          const responseBody =
+            await response.text();
 
           throw new Error(
-            message,
+            `DELETE /auth/account zwróciło ${response.status}: ${responseBody}`,
           );
         }
 
         /*
-         * Konto zostało już usunięte
-         * po stronie backendu/Supabase.
-         *
-         * Czyścimy wyłącznie lokalną
-         * sesję na urządzeniu.
+         * Konto na backendzie już nie istnieje.
+         * Czyścimy lokalną sesję Supabase.
          */
         const {
           error:
@@ -217,112 +293,70 @@ export default function AccountScreen() {
         } =
           await supabase.auth
             .signOut({
-              scope: 'local',
+              scope:
+                'local',
             });
 
         if (signOutError) {
           console.warn(
-            'Konto usunięte, ale wystąpił problem podczas czyszczenia lokalnej sesji:',
+            'Konto usunięte, ale lokalna sesja nie została poprawnie wyczyszczona:',
             signOutError,
           );
         }
 
-        router.replace(
-          '/login',
+        if (
+          Platform.OS ===
+          'web'
+        ) {
+          window.alert(
+            'Konto zostało usunięte.',
+          );
+
+          router.replace(
+            '/login',
+          );
+
+          return;
+        }
+
+        Alert.alert(
+          'Konto usunięte',
+
+          'Twoje konto i dane HomeVault zostały usunięte.',
+
+          [
+            {
+              text:
+                'OK',
+
+              onPress:
+                () =>
+                  router.replace(
+                    '/login',
+                  ),
+            },
+          ],
+
+          {
+            cancelable:
+              false,
+          },
         );
-      } catch (error) {
+      } catch (err) {
         console.error(
           'Błąd usuwania konta:',
-          error,
+          err,
         );
-
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'Nie udało się usunąć konta.';
 
         showMessage(
-          'Nie udało się usunąć konta',
-          message,
+          'Błąd',
+          'Nie udało się usunąć konta.',
         );
       } finally {
-        setIsDeletingAccount(
+        setIsDeleting(
           false,
         );
       }
-    };
-
-  const showFinalDeleteConfirmation =
-    () => {
-      if (
-        Platform.OS === 'web'
-      ) {
-        const confirmed =
-          window.confirm(
-            'OSTATECZNE POTWIERDZENIE\n\nUsunięcie konta jest nieodwracalne. Wszystkie dane HomeVault przypisane do tego konta zostaną usunięte.\n\nCzy na pewno kontynuować?',
-          );
-
-        if (confirmed) {
-          performDeleteAccount();
-        }
-
-        return;
-      }
-
-      Alert.alert(
-        'Ostateczne potwierdzenie',
-        'Usunięcie konta jest nieodwracalne. Wszystkie dane HomeVault przypisane do tego konta zostaną usunięte.',
-        [
-          {
-            text: 'Anuluj',
-            style: 'cancel',
-          },
-          {
-            text:
-              'Usuń konto',
-            style:
-              'destructive',
-            onPress:
-              performDeleteAccount,
-          },
-        ],
-      );
-    };
-
-  const handleDeleteAccount =
-    () => {
-      if (
-        Platform.OS === 'web'
-      ) {
-        const confirmed =
-          window.confirm(
-            'Czy chcesz usunąć konto HomeVault wraz ze wszystkimi swoimi danymi?',
-          );
-
-        if (confirmed) {
-          showFinalDeleteConfirmation();
-        }
-
-        return;
-      }
-
-      Alert.alert(
-        'Usuń konto',
-        'Czy chcesz usunąć konto HomeVault wraz ze wszystkimi swoimi danymi?',
-        [
-          {
-            text: 'Anuluj',
-            style: 'cancel',
-          },
-          {
-            text: 'Dalej',
-            style:
-              'destructive',
-            onPress:
-              showFinalDeleteConfirmation,
-          },
-        ],
-      );
     };
 
   if (isLoading) {
@@ -331,6 +365,7 @@ export default function AccountScreen() {
         style={
           styles.container
         }
+        edges={['bottom']}
       >
         <View
           style={
@@ -346,22 +381,61 @@ export default function AccountScreen() {
               styles.loadingText
             }
           >
-            Ładowanie konta...
+            Pobieranie konta...
           </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const isBusy =
-    isSigningOut ||
-    isDeletingAccount;
+  if (
+    error ||
+    !account
+  ) {
+    return (
+      <SafeAreaView
+        style={
+          styles.container
+        }
+        edges={['bottom']}
+      >
+        <View
+          style={
+            styles.center
+          }
+        >
+          <Text
+            style={
+              styles.errorTitle
+            }
+          >
+            Wystąpił błąd
+          </Text>
+
+          <Text
+            style={
+              styles.errorText
+            }
+          >
+            {error}
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const provider =
+    formatProvider(
+      account.provider ??
+        'email',
+    );
 
   return (
     <SafeAreaView
       style={
         styles.container
       }
+      edges={['bottom']}
     >
       <ScrollView
         contentContainerStyle={
@@ -370,62 +444,7 @@ export default function AccountScreen() {
       >
         <View
           style={
-            styles.header
-          }
-        >
-          <Pressable
-            disabled={isBusy}
-            onPress={() =>
-              router.back()
-            }
-            style={({
-              pressed,
-            }) => [
-              styles.backButton,
-
-              pressed &&
-                styles.pressed,
-
-              isBusy &&
-                styles.disabled,
-            ]}
-          >
-            <Text
-              style={
-                styles.backButtonText
-              }
-            >
-              ‹
-            </Text>
-          </Pressable>
-
-          <View
-            style={
-              styles.headerText
-            }
-          >
-            <Text
-              style={
-                styles.title
-              }
-            >
-              Konto
-            </Text>
-
-            <Text
-              style={
-                styles.subtitle
-              }
-            >
-              Informacje i ustawienia
-              Twojego konta.
-            </Text>
-          </View>
-        </View>
-
-        <View
-          style={
-            styles.profileCard
+            styles.profile
           }
         >
           <View
@@ -439,34 +458,27 @@ export default function AccountScreen() {
               }
             >
               {getInitial(
-                email,
+                account.email,
               )}
             </Text>
           </View>
 
-          <View
+          <Text
             style={
-              styles.profileInfo
+              styles.email
             }
           >
-            <Text
-              style={
-                styles.email
-              }
-            >
-              {email ??
-                'Brak adresu e-mail'}
-            </Text>
+            {account.email ??
+              'Brak adresu e-mail'}
+          </Text>
 
-            <Text
-              style={
-                styles.provider
-              }
-            >
-              Logowanie:{' '}
-              {provider}
-            </Text>
-          </View>
+          <Text
+            style={
+              styles.provider
+            }
+          >
+            {provider}
+          </Text>
         </View>
 
         <Text
@@ -497,7 +509,7 @@ export default function AccountScreen() {
                   styles.rowTitle
                 }
               >
-                Adres e-mail
+                E-mail
               </Text>
 
               <Text
@@ -505,7 +517,8 @@ export default function AccountScreen() {
                   styles.rowDescription
                 }
               >
-                {email ?? '—'}
+                {account.email ??
+                  '—'}
               </Text>
             </View>
           </View>
@@ -531,7 +544,7 @@ export default function AccountScreen() {
                   styles.rowTitle
                 }
               >
-                Metoda logowania
+                Logowanie
               </Text>
 
               <Text
@@ -559,7 +572,10 @@ export default function AccountScreen() {
           }
         >
           <Pressable
-            disabled={isBusy}
+            disabled={
+              isSigningOut ||
+              isDeleting
+            }
             onPress={
               handleSignOut
             }
@@ -570,9 +586,6 @@ export default function AccountScreen() {
 
               pressed &&
                 styles.pressed,
-
-              isBusy &&
-                styles.disabled,
             ]}
           >
             <View
@@ -593,8 +606,7 @@ export default function AccountScreen() {
                   styles.rowDescription
                 }
               >
-                Zakończ bieżącą
-                sesję HomeVault.
+                Zakończ bieżącą sesję HomeVault.
               </Text>
             </View>
 
@@ -628,7 +640,10 @@ export default function AccountScreen() {
           }
         >
           <Pressable
-            disabled={isBusy}
+            disabled={
+              isDeleting ||
+              isSigningOut
+            }
             onPress={
               handleDeleteAccount
             }
@@ -639,9 +654,6 @@ export default function AccountScreen() {
 
               pressed &&
                 styles.pressed,
-
-              isBusy &&
-                styles.disabled,
             ]}
           >
             <View
@@ -662,14 +674,11 @@ export default function AccountScreen() {
                   styles.rowDescription
                 }
               >
-                Usuń konto oraz
-                wszystkie przypisane
-                do niego dane
-                HomeVault.
+                Trwale usuń konto oraz wszystkie dane HomeVault.
               </Text>
             </View>
 
-            {isDeletingAccount ? (
+            {isDeleting ? (
               <ActivityIndicator
                 size="small"
               />
@@ -721,7 +730,9 @@ function formatProvider(
 }
 
 function getInitial(
-  email: string | null,
+  email:
+    | string
+    | null,
 ) {
   if (!email) {
     return '?';
@@ -767,141 +778,97 @@ const styles =
 
     center: {
       flex: 1,
-      alignItems: 'center',
+      alignItems:
+        'center',
       justifyContent:
         'center',
+      padding: 24,
     },
 
     loadingText: {
-      marginTop: 14,
+      marginTop: 12,
       color: '#6B7280',
     },
 
-    header: {
-      flexDirection: 'row',
+    profile: {
       alignItems:
-        'flex-start',
-      marginBottom: 28,
-    },
-
-    backButton: {
-      width: 42,
-      height: 42,
-      borderRadius: 12,
-      backgroundColor:
-        '#FFFFFF',
-      borderWidth: 1,
-      borderColor:
-        '#E5E7EB',
-      alignItems: 'center',
-      justifyContent:
         'center',
-      marginRight: 14,
-    },
-
-    backButtonText: {
-      fontSize: 32,
-      lineHeight: 34,
-      color: '#374151',
-    },
-
-    headerText: {
-      flex: 1,
-    },
-
-    title: {
-      fontSize: 30,
-      fontWeight: '700',
-      color: '#111827',
-    },
-
-    subtitle: {
-      marginTop: 5,
-      color: '#6B7280',
-      lineHeight: 20,
-    },
-
-    profileCard: {
-      backgroundColor:
-        '#FFFFFF',
-      borderRadius: 18,
-      borderWidth: 1,
-      borderColor:
-        '#E5E7EB',
-      padding: 20,
-      flexDirection: 'row',
-      alignItems: 'center',
+      marginBottom: 34,
     },
 
     avatar: {
-      width: 58,
-      height: 58,
-      borderRadius: 29,
+      width: 76,
+      height: 76,
+      borderRadius: 38,
       backgroundColor:
         '#111827',
-      alignItems: 'center',
+      alignItems:
+        'center',
       justifyContent:
         'center',
     },
 
     avatarText: {
       color: '#FFFFFF',
-      fontSize: 24,
-      fontWeight: '700',
-    },
-
-    profileInfo: {
-      flex: 1,
-      marginLeft: 16,
+      fontSize: 30,
+      fontWeight:
+        '700',
     },
 
     email: {
+      marginTop: 16,
+      fontSize: 19,
+      fontWeight:
+        '600',
       color: '#111827',
-      fontSize: 16,
-      fontWeight: '600',
     },
 
     provider: {
       marginTop: 5,
-      color: '#6B7280',
       fontSize: 14,
+      color: '#6B7280',
     },
 
     sectionTitle: {
-      marginTop: 30,
+      marginTop: 24,
       marginBottom: 10,
-      marginLeft: 4,
+      fontSize: 14,
+      fontWeight:
+        '700',
       color: '#6B7280',
-      fontSize: 13,
-      fontWeight: '700',
       textTransform:
         'uppercase',
     },
 
     card: {
-      backgroundColor:
-        '#FFFFFF',
+      overflow:
+        'hidden',
       borderRadius: 16,
       borderWidth: 1,
       borderColor:
         '#E5E7EB',
-      overflow: 'hidden',
+      backgroundColor:
+        '#FFFFFF',
     },
 
     row: {
-      minHeight: 74,
+      minHeight: 76,
       paddingHorizontal: 18,
       paddingVertical: 15,
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
     },
 
     actionRow: {
-      minHeight: 74,
+      minHeight: 76,
       paddingHorizontal: 18,
       paddingVertical: 15,
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
     },
 
     rowContent: {
@@ -910,13 +877,15 @@ const styles =
 
     rowTitle: {
       fontSize: 16,
-      fontWeight: '600',
+      fontWeight:
+        '600',
       color: '#111827',
     },
 
     deleteTitle: {
       fontSize: 16,
-      fontWeight: '600',
+      fontWeight:
+        '600',
       color: '#B91C1C',
     },
 
@@ -935,29 +904,40 @@ const styles =
     },
 
     arrow: {
-      marginLeft: 12,
-      fontSize: 30,
+      marginLeft: 15,
+      fontSize: 28,
       color: '#9CA3AF',
     },
 
     deleteArrow: {
-      marginLeft: 12,
-      fontSize: 30,
+      marginLeft: 15,
+      fontSize: 28,
       color: '#B91C1C',
-    },
-
-    footer: {
-      marginTop: 34,
-      textAlign: 'center',
-      color: '#9CA3AF',
-      fontSize: 12,
     },
 
     pressed: {
       opacity: 0.65,
     },
 
-    disabled: {
-      opacity: 0.5,
+    errorTitle: {
+      fontSize: 20,
+      fontWeight:
+        '700',
+      color: '#B91C1C',
+    },
+
+    errorText: {
+      marginTop: 8,
+      color: '#6B7280',
+      textAlign:
+        'center',
+    },
+
+    footer: {
+      marginTop: 34,
+      textAlign:
+        'center',
+      color: '#9CA3AF',
+      fontSize: 12,
     },
   });
